@@ -51,10 +51,9 @@ export function tradeKey(trade: { txHash: string; wallet: string; token: string;
 }
 
 /**
- * Converts raw feed records and marks multi-hop route legs. Within one
- * (tx, wallet) group with several tokens, a leg is a route leg when its token
- * is a known route token or a learned one (`learnedRoutes`), as long as at
- * least one leg of the group stays a real trade.
+ * Converts raw feed records and marks route legs: known route tokens always,
+ * learned ones (`learnedRoutes`) when they sit next to another token in the
+ * same (tx, wallet) group and at least one leg stays a real trade.
  */
 export function normalizeFeed(list: FeedTrade[], learnedRoutes: ReadonlySet<string> = new Set()): NormalizedTrade[] {
   const trades: NormalizedTrade[] = [];
@@ -72,7 +71,8 @@ export function normalizeFeed(list: FeedTrade[], learnedRoutes: ReadonlySet<stri
       tokenAmount: finite(raw.token_amount),
       buyCostUsd: finite(raw.buy_cost_usd),
       isOpenOrClose: raw.is_open_or_close === 1 ? 1 : 0,
-      route: false,
+      // Stablecoins, SOL wrappers and majors are never a signal, even alone.
+      route: ROUTE_TOKENS.has(raw.base_address),
       ts: Math.floor(finite(raw.timestamp)),
       symbol: raw.base_token?.symbol ?? '',
       logo: raw.base_token?.logo ?? '',
@@ -98,7 +98,7 @@ export function normalizeFeed(list: FeedTrade[], learnedRoutes: ReadonlySet<stri
   for (const group of groups.values()) {
     if (new Set(group.map((trade) => trade.token)).size < 2) continue;
     const isRoute = (trade: NormalizedTrade) => ROUTE_TOKENS.has(trade.token) || learnedRoutes.has(trade.token);
-    if (group.every(isRoute)) continue;
+    if (group.every(isRoute)) continue; // static route legs are already marked
     for (const trade of group) if (isRoute(trade)) trade.route = true;
   }
   return trades;

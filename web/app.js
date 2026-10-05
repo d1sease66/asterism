@@ -47,8 +47,18 @@ const REASONS = {
 const reason = (r) => REASONS[r] || r || '';
 
 // ---------- data ----------
+// Snapshot mode (static hosting): the build stamps <html data-snapshot="cutoff">
+// and ships /api/public/*.json files instead of a live backend.
+const SNAPSHOT = Number(document.documentElement.dataset.snapshot) || 0;
+function apiPath(path) {
+  if (!SNAPSHOT) return path;
+  const [route, query = ''] = path.split('?');
+  const params = new URLSearchParams(query);
+  if (route === '/api/public/wallet') return `/api/public/wallet/${encodeURIComponent(params.get('a') || '')}.json`;
+  return route + '.json';
+}
 async function get(path) {
-  const res = await fetch(path, { cache: 'no-store' });
+  const res = await fetch(apiPath(path), { cache: SNAPSHOT ? 'default' : 'no-store' });
   if (!res.ok) throw new Error(path + ' ' + res.status);
   return res.json();
 }
@@ -214,12 +224,16 @@ const Sky = (() => {
     // Asterism anchors live in the upper-right, away from the headline.
     // Fixed slots keep asterisms apart and clear of the headline and HUD.
     const slots = mobile
-      ? [[.3, .15], [.72, .25]]
+      ? [[.3, .2], [.7, .85]]
       : [[.44, .22], [.8, .13], [.63, .34], [.27, .12], [.5, .45], [.92, .3]];
+    // On phones the asterisms live in the free band between header and copy.
+    const copyTop = mobile ? $('.sky-copy').offsetTop : 0;
     groups = state.sky.asterisms.slice(0, slots.length).map((a, i) => {
       const [sx, sy] = slots[i];
       const cx = w * (sx + (hash(a.token, 7) - .5) * .04);
-      const cy = Math.max(mobile ? 130 : 150, h * (sy + (hash(a.token, 9) - .5) * .04));
+      const cy = mobile
+        ? 96 + Math.max(40, copyTop - 150) * sy
+        : Math.max(150, h * (sy + (hash(a.token, 9) - .5) * .04));
       return { ...a, cx, cy, r: (mobile ? 30 : 70) + a.wallets.length * (mobile ? 3 : 6), members: [] };
     });
     const member = new Map();
@@ -608,6 +622,16 @@ const Drawer = (() => {
   addEventListener('keydown', (e) => { if (e.key === 'Escape' && !root.hidden) close(); });
   return { open, close };
 })();
+
+if (SNAPSHOT) {
+  const at = new Date(SNAPSHOT * 1000).toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+  const live = $('.live');
+  if (live) live.innerHTML = '<i class="off"></i>Snapshot';
+  const delay = $('.tape-delay');
+  if (delay) delay.textContent = at;
+  const kicker = $('.sky-copy .kicker span:last-child');
+  if (kicker) kicker.innerHTML = `Solana · smart money · snapshot ${at}`;
+}
 
 // ---------- live tape: replay the delayed feed at its real pace ----------
 const Tape = (() => {

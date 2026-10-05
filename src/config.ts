@@ -28,10 +28,13 @@ function readGmgnKey(): string {
 
 export const GMGN_API_KEY = readGmgnKey();
 export const GMGN_HOST = process.env.GMGN_HOST?.trim() || 'https://openapi.gmgn.ai';
-// Own leaky bucket in front of GMGN (weight units per second / burst). The
-// documented 10/10 bucket got us a 429 within 3 s, so start well below it.
-export const GMGN_RATE_PER_SEC = num('GMGN_RATE_PER_SEC', 1);
-export const GMGN_BURST = num('GMGN_BURST', 8);
+// Own leaky bucket in front of GMGN. Measured 2026-10-06: the plan allows
+// about 10 weight units per MINUTE (not per second as the docs say); every
+// 429 so far happened right after ~11 units within a minute.
+export const GMGN_RATE_PER_SEC = num('GMGN_RATE_PER_SEC', 9 / 60);
+export const GMGN_BURST = num('GMGN_BURST', 9);
+// Units background work (discovery, backfills) must leave free for the feeds.
+export const GMGN_FEED_RESERVE = num('GMGN_FEED_RESERVE', 4);
 export const GMGN_TIMEOUT_MS = num('GMGN_TIMEOUT_MS', 15_000);
 
 export const DATA_DIR = resolve(process.env.DATA_DIR || './data');
@@ -44,7 +47,7 @@ export const REPORT_UTC_OFFSET_HOURS = num('REPORT_UTC_OFFSET_HOURS', 3);
 // Collector. The smartmoney feed returns 100 trades that covered only ~25 s
 // on 2026-10-06, so its interval adapts to the observed coverage.
 export const POLL_SMARTMONEY_SEC = num('POLL_SMARTMONEY_SEC', 20);
-export const POLL_SMARTMONEY_MIN_SEC = Math.max(5, num('POLL_SMARTMONEY_MIN_SEC', 8));
+export const POLL_SMARTMONEY_MIN_SEC = Math.max(5, num('POLL_SMARTMONEY_MIN_SEC', 12));
 export const POLL_SMARTMONEY_MAX_SEC = num('POLL_SMARTMONEY_MAX_SEC', 30);
 export const POLL_KOL_SEC = num('POLL_KOL_SEC', 60);
 export const POLL_KOL_MIN_SEC = Math.max(5, num('POLL_KOL_MIN_SEC', 20));

@@ -12,8 +12,10 @@ import { earlyBuyers, pickWinners, type EarlyHit, type Winner } from './early.js
 const log = logger('discovery');
 
 export interface DiscoveryOptions {
-  /** Winner tokens scanned per run (each costs 2 × weight 5). */
+  /** Winner tokens scanned per run (weight 5 each, plus 5 more with smart_degen). */
   tokensPerRun: number;
+  /** Also query the smart_degen-tagged trader list (doubles the cost). */
+  smartDegenPass: boolean;
   /** A token is rescanned after this long. */
   rescanSec: number;
   /** Distinct winners a wallet must be early in. */
@@ -23,11 +25,14 @@ export interface DiscoveryOptions {
   resyncSec: number;
 }
 
+// GMGN allows ~10 units/min and the feeds use about half, so a pass of
+// 30 tokens (150 units) takes roughly 40 minutes in the background.
 export const DEFAULT_DISCOVERY: DiscoveryOptions = {
-  tokensPerRun: 60,
+  tokensPerRun: 30,
+  smartDegenPass: false,
   rescanSec: 3 * 86400,
   minWinners: 2,
-  walletsPerSync: 60,
+  walletsPerSync: 20,
   resyncSec: 6 * 3600,
 };
 
@@ -75,7 +80,7 @@ export class Discovery {
 
   async winners(): Promise<Winner[]> {
     const lists: RankItem[] = [];
-    for (const [interval, orderBy] of [['24h', 'history_highest_market_cap'], ['6h', 'history_highest_market_cap'], ['1h', 'history_highest_market_cap'], ['24h', 'volume']] as const) {
+    for (const [interval, orderBy] of [['24h', 'history_highest_market_cap'], ['6h', 'history_highest_market_cap']] as const) {
       try {
         lists.push(...await this.client.trending(interval, { orderBy, limit: 100 }));
       } catch (error) {
@@ -122,7 +127,7 @@ export class Discovery {
   async scan(winner: Winner): Promise<number> {
     const byWallet = new Map<string, EarlyHit>();
     let traders = 0;
-    for (const tag of [undefined, 'smart_degen']) {
+    for (const tag of this.options.smartDegenPass ? [undefined, 'smart_degen'] : [undefined]) {
       const { list } = await this.client.tokenTraders(winner.address, { orderBy: 'profit', limit: 100, tag });
       traders += list?.length ?? 0;
       for (const hit of earlyBuyers(list ?? [], winner)) byWallet.set(hit.wallet, hit);

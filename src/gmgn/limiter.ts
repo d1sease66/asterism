@@ -11,6 +11,8 @@ export interface LimiterOptions {
   /** Rate recovers by this factor every `recoverEveryMs` without a 429. */
   recoverFactor?: number;
   recoverEveryMs?: number;
+  /** Bucket level at start; a full bucket makes a fresh process wait first. */
+  initialLevel?: number;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
 }
@@ -18,6 +20,8 @@ export interface LimiterOptions {
 interface Waiter {
   weight: number;
   priority: number;
+  /** Units that must stay free after this grant (headroom for higher priorities). */
+  reserve: number;
   seq: number;
   resolve: () => void;
 }
@@ -45,18 +49,19 @@ export class WeightedLimiter {
     this.maxRate = options.ratePerSec;
     this.rate = options.ratePerSec;
     this.capacity = options.capacity;
-    this.minRate = options.minRatePerSec ?? Math.min(0.2, options.ratePerSec);
+    this.minRate = options.minRatePerSec ?? options.ratePerSec / 4;
     this.recoverFactor = options.recoverFactor ?? 1.25;
     this.recoverEveryMs = options.recoverEveryMs ?? 5 * 60_000;
     this.now = options.now ?? Date.now;
     this.sleep = options.sleep ?? ((ms) => new Promise((done) => setTimeout(done, ms)));
     this.lastLeak = this.now();
+    this.level = options.initialLevel ?? 0;
   }
 
-  acquire(weight: number, priority = 0): Promise<void> {
-    if (weight > this.capacity) throw new Error(`weight ${weight} exceeds bucket capacity ${this.capacity}`);
+  acquire(weight: number, priority = 0, reserve = 0): Promise<void> {
+    if (weight + reserve > this.capacity) throw new Error(`weight ${weight} + reserve ${reserve} exceeds bucket capacity ${this.capacity}`);
     return new Promise((resolve) => {
-      this.queue.push({ weight, priority, seq: this.seq++, resolve });
+      this.queue.push({ weight, priority, reserve, seq: this.seq++, resolve });
       this.queue.sort((a, b) => b.priority - a.priority || a.seq - b.seq);
       void this.pump();
     });
@@ -99,7 +104,7 @@ export class WeightedLimiter {
         }
         this.leak();
         const head = this.queue[0]!;
-        const overflow = this.level + head.weight - this.capacity;
+        const overflow = this.level + head.weight + head.reserve - this.capacity;
         if (overflow <= 0) {
           this.queue.shift();
           this.level += head.weight;

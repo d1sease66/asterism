@@ -26,22 +26,18 @@ export class FeedCollector {
   intervalSec: number;
   private readonly store: TradeStore;
   private readonly logPoll;
-  private readonly learnedRoutes: Set<string>;
-  private readonly partners: Map<string, Set<string>>;
 
   constructor(
     private readonly db: DB,
     private readonly client: GmgnClient,
     private readonly options: FeedOptions,
+    private readonly routes: RouteBook,
     private readonly onTrades?: TradesListener,
   ) {
     this.store = new TradeStore(db);
     this.intervalSec = Number(getState(db, `${options.feed}:interval`)) || options.initialSec;
     this.logPoll = db.prepare(`INSERT INTO poll_log (feed, ts, records, inserted, span_sec, overlap, gap, interval_sec, error)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-    this.learnedRoutes = new Set(JSON.parse(getState(db, 'routes:learned') ?? '[]') as string[]);
-    const stored = JSON.parse(getState(db, 'routes:partners') ?? '{}') as Record<string, string[]>;
-    this.partners = new Map(Object.entries(stored).map(([token, list]) => [token, new Set(list)]));
   }
 
   start(): void {
@@ -69,11 +65,11 @@ export class FeedCollector {
   async pollOnce(): Promise<{ inserted: number; gap: boolean; spanSec: number }> {
     const { feed } = this.options;
     const response = feed === 'smartmoney' ? await this.client.smartMoney(100) : await this.client.kol(100);
-    const trades = normalizeFeed(response.list ?? [], this.learnedRoutes);
+    const trades = normalizeFeed(response.list ?? [], this.routes.learned);
     const prevNewest = getState(this.db, `${feed}:newest_ts`);
     const result = coverage(trades, (key) => this.store.known(key), prevNewest === undefined ? undefined : Number(prevNewest));
     const fresh = this.store.save(feed, trades);
-    this.learnRoutes(trades);
+    this.routes.learn(trades);
 
     const now = Math.floor(Date.now() / 1000);
     this.intervalSec = nextInterval(this.intervalSec, result, this.options.minSec, this.options.maxSec);
@@ -90,8 +86,23 @@ export class FeedCollector {
     if (fresh.length > 0) this.onTrades?.(feed, fresh);
     return { inserted: fresh.length, gap: result.gap, spanSec: result.spanSec };
   }
+}
 
-  private learnRoutes(trades: NormalizedTrade[]): void {
+/**
+ * Route tokens learned from multi-hop swaps, shared by all feed collectors so
+ * a token is learned (and logged) once.
+ */
+export class RouteBook {
+  readonly learned: Set<string>;
+  private readonly partners: Map<string, Set<string>>;
+
+  constructor(private readonly db: DB) {
+    this.learned = new Set(JSON.parse(getState(db, 'routes:learned') ?? '[]') as string[]);
+    const stored = JSON.parse(getState(db, 'routes:partners') ?? '{}') as Record<string, string[]>;
+    this.partners = new Map(Object.entries(stored).map(([token, list]) => [token, new Set(list)]));
+  }
+
+  learn(trades: NormalizedTrade[]): void {
     let changed = false;
     for (const [token, partners] of multiLegPartners(trades)) {
       const set = this.partners.get(token) ?? new Set<string>();
@@ -101,8 +112,8 @@ export class FeedCollector {
       changed = true;
       // Keep the record bounded: only the count matters past the threshold.
       this.partners.set(token, new Set([...set].slice(0, ROUTE_PROMOTE_PARTNERS * 2)));
-      if (set.size >= ROUTE_PROMOTE_PARTNERS && !this.learnedRoutes.has(token)) {
-        this.learnedRoutes.add(token);
+      if (set.size >= ROUTE_PROMOTE_PARTNERS && !this.learned.has(token)) {
+        this.learned.add(token);
         log.info(`learned route token ${token} (${set.size} partners)`);
         // Re-mark stored legs of this token that sit next to another token in the same tx.
         this.db.prepare(`UPDATE trades SET route = 1 WHERE token = ? AND route = 0 AND EXISTS (
@@ -110,7 +121,7 @@ export class FeedCollector {
       }
     }
     if (!changed) return;
-    setState(this.db, 'routes:learned', JSON.stringify([...this.learnedRoutes]));
+    setState(this.db, 'routes:learned', JSON.stringify([...this.learned]));
     setState(this.db, 'routes:partners', JSON.stringify(Object.fromEntries([...this.partners].map(([token, set]) => [token, [...set]]))));
   }
 }

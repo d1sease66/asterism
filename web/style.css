@@ -401,3 +401,4 @@ body::after {
   .d-list li { grid-template-columns: 58px 34px minmax(0, 1fr) auto; font-size: 11px; }
 }
 .d-list .flag { font: 500 9px/1 var(--mono); letter-spacing: .08em; color: var(--ember); }
+.live i.off { background: var(--s38); animation: none; box-shadow: none; }

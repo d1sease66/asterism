@@ -11,7 +11,8 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "test": "tsc && node --test tests/*.test.mjs",
-    "stats": "node scripts/collector-stats.mjs"
+    "stats": "node scripts/collector-stats.mjs",
+    "deploy:vercel": "npm run build && node scripts/build-vercel.mjs && cd .vercel-out && vercel deploy --prod --yes"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3"

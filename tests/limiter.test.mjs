@@ -51,3 +51,16 @@ test('penalize pauses everything until reset and halves the rate, which recovers
   await limiter.acquire(1);
   assert.equal(limiter.rate, 1);
 });
+
+test('background reserve: a feed request is never starved by background work', async () => {
+  const c = clock();
+  const limiter = new WeightedLimiter({ ratePerSec: 1, capacity: 9, now: c.now, sleep: c.sleep });
+  await limiter.acquire(5, 0, 4);          // level 5: background got in, 4 units left free
+  const t0 = c.t;
+  await limiter.acquire(1, 10);            // feed fits in the reserve at once
+  assert.equal(c.t, t0);
+  await limiter.acquire(3, 10);            // feed can use the rest of the bucket
+  assert.equal(c.t, t0);
+  await limiter.acquire(5, 0, 4);          // background waits until level ≤ 0 (9 + 5 + 4 − 9 = 9 s)
+  assert.equal(c.t - t0, 9000);
+});

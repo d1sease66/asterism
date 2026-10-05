@@ -36,21 +36,17 @@ test('multi-hop: the cbBTC leg of a SOL→cbBTC→meme swap is a route leg', () 
   const trades = normalizeFeed(fixture('track-smartmoney').list);
   const cb = trades.filter((trade) => trade.token === CBBTC);
   assert.ok(cb.length > 0);
-  // Every cbBTC record that shares a tx with another token is route; a lone cbBTC trade is not.
-  for (const trade of cb) {
-    const partners = trades.filter((other) => other.txHash === trade.txHash && other.wallet === trade.wallet && other.token !== CBBTC);
-    assert.equal(trade.route, partners.length > 0);
-  }
+  // cbBTC is a known route token: every record of it is a route leg.
+  assert.ok(cb.every((trade) => trade.route));
   // The meme legs stay real.
   assert.ok(trades.some((trade) => trade.symbol === 'SIRIUS' && !trade.route));
 });
 
-test('multi-hop: a group made only of route tokens keeps its legs', () => {
-  const trades = normalizeFeed([
-    raw({ base_address: CBBTC }),
-    raw({ base_address: 'So11111111111111111111111111111111111111112' }),
-  ]);
-  assert.ok(trades.every((trade) => !trade.route));
+test('known route tokens are route even as a lone trade; learned ones only next to another token', () => {
+  const lone = normalizeFeed([raw({ base_address: 'So11111111111111111111111111111111111111112' })]);
+  assert.equal(lone[0].route, true);
+  const learnedAlone = normalizeFeed([raw({ base_address: 'PUMP' })], new Set(['PUMP']));
+  assert.equal(learnedAlone[0].route, false);
 });
 
 test('learned route tokens are applied, and partners are counted for unknown pairs', () => {
@@ -83,8 +79,7 @@ test('store: repeated polls insert each trade once and keep wallets/tokens', () 
   const kol = db.prepare("SELECT * FROM wallets WHERE twitter_username = 'pheromones_sol'").get();
   assert.ok(kol && JSON.parse(kol.tags_json).includes('kol'));
   // Route legs do not create token rows.
-  assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM tokens WHERE address = ?`).get(CBBTC).n,
-    trades.some((trade) => trade.token === CBBTC && !trade.route) ? 1 : 0);
+  assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM tokens WHERE address = ?`).get(CBBTC).n, 0);
   assert.ok(store.known(tradeKey(trades[0])));
 });
 

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { GMGN_API_KEY, GMGN_BURST, GMGN_HOST, GMGN_RATE_PER_SEC, GMGN_TIMEOUT_MS } from '../config.js';
+import { GMGN_API_KEY, GMGN_BURST, GMGN_FEED_RESERVE, GMGN_HOST, GMGN_RATE_PER_SEC, GMGN_TIMEOUT_MS } from '../config.js';
 import { logger } from '../log.js';
 import { WeightedLimiter } from './limiter.js';
 import type {
@@ -68,14 +68,18 @@ export class GmgnClient {
 
   constructor(private readonly apiKey = GMGN_API_KEY, limiter?: WeightedLimiter) {
     if (!apiKey) throw new Error('GMGN_API_KEY is not configured (env or ~/.config/gmgn/.env)');
-    this.limiter = limiter ?? new WeightedLimiter({ ratePerSec: GMGN_RATE_PER_SEC, capacity: GMGN_BURST });
+    // Start with a full bucket: a restart cannot see what the previous process
+    // spent in the last minute, and GMGN counts both.
+    this.limiter = limiter ?? new WeightedLimiter({ ratePerSec: GMGN_RATE_PER_SEC, capacity: GMGN_BURST, initialLevel: GMGN_BURST });
   }
 
   async request<T>(path: string, options: RequestOptions): Promise<T> {
     const method = options.method ?? 'GET';
     let lastError: unknown;
     for (let attempt = 1; attempt <= RETRIES; attempt += 1) {
-      await this.limiter.acquire(options.weight, options.priority ?? PRIORITY.background);
+      const priority = options.priority ?? PRIORITY.background;
+      // Anything below feed priority leaves headroom so a feed poll never waits long.
+      await this.limiter.acquire(options.weight, priority, priority < PRIORITY.feed ? GMGN_FEED_RESERVE : 0);
       try {
         return await this.once<T>(method, path, options);
       } catch (error) {
@@ -153,11 +157,12 @@ export class GmgnClient {
 
   // ---- Market ----
   async trending(interval: '1m' | '5m' | '1h' | '6h' | '24h', options: { orderBy?: string; limit?: number; filters?: string[] } = {}): Promise<RankItem[]> {
-    const data = await this.request<{ rank: RankItem[] }>('/v1/market/rank', {
+    // The rank route nests its payload one level deeper: data.data.rank.
+    const data = await this.request<{ rank?: RankItem[]; data?: { rank?: RankItem[] } }>('/v1/market/rank', {
       query: { chain: 'sol', interval, limit: options.limit ?? 100, order_by: options.orderBy, direction: 'desc', filters: options.filters },
       weight: 1,
     });
-    return data.rank ?? [];
+    return data.rank ?? data.data?.rank ?? [];
   }
 
   async kline(address: string, resolution: '1m' | '5m' | '15m' | '1h' | '4h' | '1d', fromSec: number, toSec: number, priority: number = PRIORITY.background): Promise<Candle[]> {

@@ -159,6 +159,15 @@ const MIGRATIONS: string[] = [
     trades INTEGER NOT NULL DEFAULT 0
   );
   `,
+  `
+  -- Known route tokens are never signals, even as a single-leg trade.
+  UPDATE trades SET route = 1 WHERE route = 0 AND token IN (
+    'So11111111111111111111111111111111111111112', 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+    'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', 'USD1ttGY1N17NEEHLmELoaybftRBUSErhqYiQzvEmuB',
+    'cbbtcf3aa214zXHbiAZQwf4122FBYbraNdFqgw4iMij', '3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh',
+    '7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs', 'J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn',
+    'mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So', 'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN');
+  `,
 ];
 
 export function openDb(dataDir: string, file = 'swa.sqlite'): DB {
