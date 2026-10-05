@@ -1,170 +1,170 @@
-# GMGN: реальные поля ответов (Solana)
+# GMGN: actual response fields (Solana)
 
-Снято 2026-10-06 с `gmgn-cli` 1.6.6. Образцы ответов лежат в `fixtures/`.
-Всё, что ниже, проверено на сырых ответах. Если поле не описано здесь, его смысл не угадываем.
+Captured 2026-10-06 with `gmgn-cli` 1.6.6. Sample responses are in `fixtures/`.
+Everything below was verified against raw responses. If a field is not described here, we do not guess its meaning.
 
-## Транспорт
+## Transport
 
-- CLI — тонкая обёртка над `https://openapi.gmgn.ai`. Обычные маршруты (track kol/smartmoney, token, market, portfolio):
-  заголовок `X-APIKEY`, в query `timestamp` (unix сек, сервер допускает ±5 с) и `client_id` (UUID, повтор в течение 7 с отклоняется).
-- При `429` сервер отдаёт заголовок `x-ratelimit-reset` (unix сек) и тело `{code:429, error:"RATE_LIMIT_EXCEEDED"|"RATE_LIMIT_BANNED", message, reset_at}`.
-- `--raw` печатает одну строку JSON — это `data` из ответа API (у `market trending` обёртка `{code,data:{rank},message,reason}` сохраняется).
+- The CLI is a thin wrapper over `https://openapi.gmgn.ai`. Regular routes (track kol/smartmoney, token, market, portfolio):
+  `X-APIKEY` header, with `timestamp` (unix sec, the server allows ±5 s) and `client_id` (UUID, a repeat within 7 s is rejected) in the query.
+- On `429` the server returns an `x-ratelimit-reset` header (unix sec) and the body `{code:429, error:"RATE_LIMIT_EXCEEDED"|"RATE_LIMIT_BANNED", message, reset_at}`.
+- `--raw` prints a single line of JSON, which is the `data` of the API response (for `market trending` the wrapper `{code,data:{rank},message,reason}` is kept).
 
-## Лимиты — расходятся со скиллом
+## Limits: they differ from the skill
 
-Скилл говорит «rate=10, capacity=10», то есть ~10 единиц веса в секунду. На деле:
+The skill says "rate=10, capacity=10", i.e. ~10 weight units per second. In practice:
 
-- Последовательность trending(1) → info(1) → security(1) → traders(5) → traders(5), выполненная за ~3 с,
-  получила `429 RATE_LIMIT_EXCEEDED` на втором `traders`, а следующий `kline` (через ~1 с) — уже `RATE_LIMIT_BANNED` на ~35 с.
-- Значит, ёмкость действительно ~10, но пополнение медленнее заявленного, а запрос в момент 429 продлевает бан.
-- Вывод для клиента: свой leaky bucket с консервативной скоростью (стартово 1 ед./с, ёмкость 8) и **полная остановка всех запросов
-  до `reset_at`** после любого 429. Точную скорость пополнения меряем в этапе 1 по логам клиента.
+- The sequence trending(1) → info(1) → security(1) → traders(5) → traders(5), run in ~3 s,
+  got `429 RATE_LIMIT_EXCEEDED` on the second `traders`, and the next `kline` (about 1 s later) got `RATE_LIMIT_BANNED` for ~35 s.
+- So the capacity really is ~10, but the refill is slower than stated, and a request made at the moment of a 429 extends the ban.
+- Conclusion for the client: use our own leaky bucket with a conservative rate (initially 1 unit/s, capacity 8) and **stop all requests completely
+  until `reset_at`** after any 429. We measure the exact refill rate in stage 1 from the client logs.
 
 ## `track smartmoney` / `track kol`
 
-Ответ: `{ list: Trade[] }`, отсортирован по `timestamp` по убыванию. `--limit 100` → ровно 100 записей.
+Response: `{ list: Trade[] }`, sorted by `timestamp` descending. `--limit 100` → exactly 100 records.
 
-| поле | смысл (проверено) |
+| field | meaning (verified) |
 |---|---|
-| `transaction_hash` | хэш транзакции. **Не уникален в ленте**: мульти-хоп свап даёт 2 записи на одну транзакцию (31 из 100 в smartmoney) |
-| `maker` | кошелёк |
+| `transaction_hash` | transaction hash. **Not unique in the feed**: a multi-hop swap yields 2 records for one transaction (31 of 100 in smartmoney) |
+| `maker` | wallet |
 | `side` | `buy` / `sell` |
-| `base_address`, `base_token.{symbol,logo,total_supply,launchpad}` | токен этой записи (`launchpad` = `pump`, `""`, …) |
-| `amount_usd` | сумма сделки, USD (= `quote_amount` у пар к USD) |
-| `token_amount` = `base_amount` | количество токенов |
-| `price_usd` (= `price`) | цена токена в USD на момент сделки |
-| `buy_cost_usd` | у `sell` — себестоимость проданной части; у `buy` — `0` |
-| `is_open_or_close` | см. ниже |
-| `timestamp` | unix сек |
-| `balance` | всегда `0` в выборке — не используем |
-| `maker_info.{tags,twitter_username,twitter_name,name,avatar}` | теги и X-аккаунт кошелька |
+| `base_address`, `base_token.{symbol,logo,total_supply,launchpad}` | the token of this record (`launchpad` = `pump`, `""`, …) |
+| `amount_usd` | trade amount, USD (= `quote_amount` for USD pairs) |
+| `token_amount` = `base_amount` | token quantity |
+| `price_usd` (= `price`) | token price in USD at the time of the trade |
+| `buy_cost_usd` | for `sell`, the cost basis of the sold part; for `buy`, `0` |
+| `is_open_or_close` | see below |
+| `timestamp` | unix sec |
+| `balance` | always `0` in the sample, so we do not use it |
+| `maker_info.{tags,twitter_username,twitter_name,name,avatar}` | the wallet's tags and X account |
 
-Полей `price_now` и `price_change` в этих лентах **нет** (они есть только у `follow-wallet`).
+The fields `price_now` and `price_change` are **not present** in these feeds (they exist only in `follow-wallet`).
 
-### `is_open_or_close` — описание в ТЗ неверно
+### `is_open_or_close`: the spec's description is wrong
 
-В ТЗ: «0 — открытие/добавление, 1 — закрытие/сокращение». В данных встречается `buy` c `1` (22 из 73 покупок smartmoney, 12 из 76 у KOL),
-и у всех таких записей `buy_cost_usd = 0`. Распределение: `buy:0 51, buy:1 22, sell:0 14, sell:1 13`.
-Рабочая трактовка (как у `follow-wallet`): **`1` = полное событие** — открытие новой позиции (`buy`) или полный выход (`sell`);
-**`0` = частичное** — докупка или частичная продажа. Направление берём только из `side`.
-**Подтверждено 2026-10-06 на ~2000 сделках collector:**
-- первая наблюдаемая покупка кошелька в токене — `1` в 78% случаев, последняя продажа — `1` в 76%;
-- из 172 повторных покупок с `1` у 158 (92%) перед ними был полный выход `sell:1` — это переоткрытие позиции;
-  у повторных покупок с `0` такое только в 16 из 230 случаев.
+The spec says: "0 is open/add, 1 is close/reduce". The data contains `buy` with `1` (22 of 73 smartmoney buys, 12 of 76 for KOL),
+and every such record has `buy_cost_usd = 0`. Distribution: `buy:0 51, buy:1 22, sell:0 14, sell:1 13`.
+Working interpretation (as in `follow-wallet`): **`1` = full event**: opening a new position (`buy`) or a full exit (`sell`);
+**`0` = partial**: adding to a position or a partial sale. Direction is taken only from `side`.
+**Confirmed 2026-10-06 on ~2000 collector trades:**
+- a wallet's first observed buy of a token is `1` in 78% of cases, the last sell is `1` in 76%;
+- of 172 repeat buys with `1`, 158 (92%) were preceded by a full exit `sell:1`, i.e. a position re-opening;
+  for repeat buys with `0` this happens in only 16 of 230 cases.
 
-### Мульти-хоп и «промежуточные» токены
+### Multi-hop and "intermediate" tokens
 
-Одна транзакция `SOL → cbBTC → SIRIUS` даёт две записи `buy SIRIUS` и `buy cbBTC` с одинаковой суммой.
-Также встречаются пары, где котировочный токен — сам мемкоин (`PUP/PUMP`, `Trannie/DJT`).
-Правило нормализации: внутри одной `(tx, maker)` отбрасываем ногу с «маршрутным» токеном
-(статический список: WSOL, USDC, USDT, USD1, cbBTC, …, плюс токены, которые часто встречаются второй ногой у разных пар — считается по накопленным данным).
+A single `SOL → cbBTC → SIRIUS` transaction yields two records, `buy SIRIUS` and `buy cbBTC`, with the same amount.
+There are also pairs where the quote token is itself a memecoin (`PUP/PUMP`, `Trannie/DJT`).
+Normalization rule: within one `(tx, maker)`, drop the leg with the "routing" token
+(a static list: WSOL, USDC, USDT, USD1, cbBTC, …, plus tokens that often appear as the second leg across different pairs, computed from accumulated data).
 
-### Покрытие ленты
+### Feed coverage
 
-| лента | 2026-10-02 (ТЗ) | 2026-10-06 00:24 МСК |
+| feed | 2026-10-02 (spec) | 2026-10-06 00:24 MSK |
 |---|---|---|
-| smartmoney, 100 сделок | ~2 мин, 39 кошельков | **25 с**, 40 кошельков, 21 токен |
-| kol, 100 сделок | ~9 мин, 15 кошельков | ~4 мин, 16 кошельков, 25 токенов |
+| smartmoney, 100 trades | ~2 min, 39 wallets | **25 s**, 40 wallets, 21 tokens |
+| kol, 100 trades | ~9 min, 15 wallets | ~4 min, 16 wallets, 25 tokens |
 
-Опрос smartmoney раз в 25 с **гарантированно даёт пропуски** в пиковые часы. Нужен адаптивный интервал (8–30 с) по фактическому покрытию.
+Polling smartmoney every 25 s **is guaranteed to miss trades** at peak hours. An adaptive interval (8–30 s) based on actual coverage is needed.
 
-### Качество списков GMGN
+### Quality of GMGN lists
 
-- smartmoney: тег `arbitrager` у 57 из 100 сделок; бот-группы — 5 кошельков купили SIRIUS в одну секунду на $44–53 каждый.
-- kol: `wash_trader` у 65 из 100 сделок, `arbitrager` у 94.
-- Значит, тег `smart_degen`/`kol` сам по себе ничего не гарантирует; фильтр и рейтинг — свои.
+- smartmoney: the `arbitrager` tag on 57 of 100 trades; bot groups: 5 wallets bought SIRIUS within the same second, $44–53 each.
+- kol: `wash_trader` on 65 of 100 trades, `arbitrager` on 94.
+- So the `smart_degen`/`kol` tag alone guarantees nothing; the filter and ranking are our own.
 
 ## `market trending`
 
-`{ code, data: { rank: Item[] } }`. 100 элементов. Полный список полей — в фикстуре; ключевые:
+`{ code, data: { rank: Item[] } }`. 100 items. The full field list is in the fixture; the key ones:
 `address, symbol, market_cap, liquidity, history_highest_market_cap, creation_timestamp, open_timestamp, launchpad_platform,
 rug_ratio, is_wash_trading, bundler_rate, smart_degen_count, renowned_count, renounced_mint, renounced_freeze_account`.
 
-- `--interval 24h --order-by history_highest_market_cap`: 65 из 100 токенов моложе 30 дней с ATH ≥ $1M.
-- **Аномальные ATH**: `DOTF` — ATH $1.1B при текущей капитализации $5.4k. Для discovery нужна проверка ATH
-  (например, ATH ≤ 200× текущей капы и подтверждение по свечам 1h).
+- `--interval 24h --order-by history_highest_market_cap`: 65 of 100 tokens are younger than 30 days with ATH ≥ $1M.
+- **Anomalous ATH**: `DOTF` has an ATH of $1.1B at a current market cap of $5.4k. Discovery needs an ATH check
+  (for example, ATH ≤ 200× the current cap and confirmation from 1h candles).
 
 ## `token info`
 
-Ключевые поля (проверено): `price` — **объект**, а не число: `{price, price_1m, price_5m, price_1h, price_6h, price_24h,
-buys_*, sells_*, volume_*, buy_volume_*, sell_volume_*, swaps_*}` — все цены и объёмы строками.
-`circulating_supply`, `total_supply`, `liquidity` (USD, число), `creation_timestamp`, `open_timestamp`, `migrated_timestamp`,
+Key fields (verified): `price` is an **object**, not a number: `{price, price_1m, price_5m, price_1h, price_6h, price_24h,
+buys_*, sells_*, volume_*, buy_volume_*, sell_volume_*, swaps_*}`, with all prices and volumes as strings.
+`circulating_supply`, `total_supply`, `liquidity` (USD, number), `creation_timestamp`, `open_timestamp`, `migrated_timestamp`,
 `ath_price`, `launchpad`, `launchpad_platform`, `launchpad_status`, `holder_count`,
-`stat.{top_10_holder_rate, top_bundler_trader_percentage, top_rat_trader_percentage, top_entrapment_trader_percentage, bot_degen_rate, fresh_wallet_rate, dev_team_hold_rate, creator_hold_rate}` (строки 0–1),
+`stat.{top_10_holder_rate, top_bundler_trader_percentage, top_rat_trader_percentage, top_entrapment_trader_percentage, bot_degen_rate, fresh_wallet_rate, dev_team_hold_rate, creator_hold_rate}` (strings 0–1),
 `wallet_tags_stat.{smart_wallets, renowned_wallets, sniper_wallets, bundler_wallets, rat_trader_wallets, fresh_wallets, whale_wallets}`.
 
-- Капитализация = `Number(price.price) × circulating_supply`.
-- `ath_price × total_supply` ≈ `history_highest_market_cap` из trending (30.8M против 31.0M) — ATH можно брать из `token info`.
+- Market cap = `Number(price.price) × circulating_supply`.
+- `ath_price × total_supply` ≈ `history_highest_market_cap` from trending (30.8M vs 31.0M), so ATH can be taken from `token info`.
 
 ## `token security`
 
-`renounced_mint`, `renounced_freeze_account` — boolean. `burn_status` (`"burn"`), `burn_ratio`, `top_10_holder_rate` (строка),
-`buy_tax`/`sell_tax` (строки), `lock_summary`.
-**В ответе для этого токена нет `rug_ratio`, `is_wash_trading`, `bundler_trader_amount_rate`** — вопреки скиллу.
-Источники для фильтров сигналов:
-- `rug_ratio`, `is_wash_trading`, `bundler_rate` — есть в `market trending`/`trenches` (по токенам вне трендов может не быть);
-- доля бандлеров — `token info → stat.top_bundler_trader_percentage`.
+`renounced_mint`, `renounced_freeze_account` are boolean. `burn_status` (`"burn"`), `burn_ratio`, `top_10_holder_rate` (string),
+`buy_tax`/`sell_tax` (strings), `lock_summary`.
+**The response for this token has no `rug_ratio`, `is_wash_trading`, `bundler_trader_amount_rate`**, contrary to the skill.
+Sources for signal filters:
+- `rug_ratio`, `is_wash_trading`, `bundler_rate` are in `market trending`/`trenches` (may be absent for tokens outside the trending lists);
+- bundler share: `token info → stat.top_bundler_trader_percentage`.
 
 ## `token traders`
 
-`{ list: Trader[] }`, до 100. Поля совпадают со скиллом. Полезное для discovery:
-- `avg_cost` (USD за токен), `history_bought_cost`, `profit`, `realized_profit`, `unrealized_profit`, `start_holding_at`, `buy_tx_count_cur`.
-- `tags` (платформенные: `fomo`, `fresh_wallet`, `sandwich_bot`, `axiom`, …) и `maker_token_tags` (по токену: `bundler`, `whale`, `transfer_in`, `diamond_hands`, `paper_hands`).
-- **Ранний вход без доп. запросов**: `avg_cost × circulating_supply / ATH`. Если средняя цена входа ≤ 10% ATH,
-  то хотя бы одна покупка была ≤ 10% ATH. На токене Agency так проходят 69 из 100 прибыльных трейдеров
-  до фильтров (`sandwich_bot`, `bundler`, `transfer_in`, аномальный `start_holding_at`).
-  `portfolio activity --token` нужен только для пограничных случаев.
+`{ list: Trader[] }`, up to 100. Fields match the skill. Useful for discovery:
+- `avg_cost` (USD per token), `history_bought_cost`, `profit`, `realized_profit`, `unrealized_profit`, `start_holding_at`, `buy_tx_count_cur`.
+- `tags` (platform-level: `fomo`, `fresh_wallet`, `sandwich_bot`, `axiom`, …) and `maker_token_tags` (per token: `bundler`, `whale`, `transfer_in`, `diamond_hands`, `paper_hands`).
+- **Early entry without extra requests**: `avg_cost × circulating_supply / ATH`. If the average entry price is ≤ 10% of ATH,
+  then at least one buy was ≤ 10% of ATH. On the Agency token, 69 of 100 profitable traders pass this
+  before filters (`sandwich_bot`, `bundler`, `transfer_in`, anomalous `start_holding_at`).
+  `portfolio activity --token` is needed only for borderline cases.
 
 ## `market kline`
 
-`{ list: Candle[] }`, по возрастанию `time` (мс). Поля: `time, open, high, low, close, volume (USD), amount (токены), source` — числа строками.
-**Отдаёт не больше 100 свечей**: запрос 24 ч по 5m вернул последние 8 ч 20 мин.
-Следствие для `outcomes`: максимум за 24 ч берём одним запросом с разрешением **15m** (96 свечей); `high` всё равно ловит пик.
-Цена через 1 ч — `close` свечи, куда попадает `buy_ts + 3600`.
+`{ list: Candle[] }`, ascending by `time` (ms). Fields: `time, open, high, low, close, volume (USD), amount (tokens), source`, with numbers as strings.
+**Returns at most 100 candles**: a 24 h request at 5m returned the last 8 h 20 min.
+Consequence for `outcomes`: take the 24 h maximum in one request at **15m** resolution (96 candles); `high` still catches the peak.
+The price after 1 h is the `close` of the candle containing `buy_ts + 3600`.
 
-## `portfolio stats` — батч не работает
+## `portfolio stats`: batch does not work
 
-CLI передаёт кошельки как повторяющийся query-параметр `wallet_address`, а сервер возвращает **один объект только по первому кошельку**.
-Вывод: `stats` вызывается по одному кошельку (вес 3). Поля (все суммы — строки):
+The CLI passes wallets as a repeated query parameter `wallet_address`, but the server returns **a single object for the first wallet only**.
+Conclusion: `stats` is called one wallet at a time (weight 3). Fields (all amounts are strings):
 
-| поле | смысл |
+| field | meaning |
 |---|---|
-| `realized_profit` | реализованная прибыль за период, USD |
-| `realized_profit_pnl` | доходность реализованной прибыли (`realized_profit / cost`); поля `pnl` нет |
-| `buy`, `sell` | число покупок/продаж за период |
-| `bought_cost`, `sold_income`, `total_cost`, `bought_fee`, `sold_fee` | обороты, USD |
-| `last_timestamp` | время последней активности |
-| `pnl_stat.winrate` | доля прибыльных токенов (верхнеуровневого `winrate` нет) |
-| `pnl_stat.token_num` | число токенов за период |
-| `pnl_stat.pnl_lt_nd5_num / pnl_nd5_0x_num / pnl_0x_2x_num / pnl_2x_5x_num / pnl_gt_5x_num` | распределение токенов по доходности: < −50%, −50…0%, 0…+100%, 2–5×, > 5× |
-| `pnl_stat.avg_holding_period` | среднее удержание, сек |
-| `common.tags`, `common.twitter_username`, `common.twitter_fans_num`, `common.created_at` | профиль |
-| `common.fund_from_address`, `common.fund_amount`, `common.fund_from_ts` | **кто профинансировал кошелёк** — для склейки сибилов |
+| `realized_profit` | realized profit for the period, USD |
+| `realized_profit_pnl` | return on realized profit (`realized_profit / cost`); there is no `pnl` field |
+| `buy`, `sell` | number of buys/sells in the period |
+| `bought_cost`, `sold_income`, `total_cost`, `bought_fee`, `sold_fee` | turnover, USD |
+| `last_timestamp` | time of last activity |
+| `pnl_stat.winrate` | share of profitable tokens (there is no top-level `winrate`) |
+| `pnl_stat.token_num` | number of tokens in the period |
+| `pnl_stat.pnl_lt_nd5_num / pnl_nd5_0x_num / pnl_0x_2x_num / pnl_2x_5x_num / pnl_gt_5x_num` | distribution of tokens by return: < −50%, −50…0%, 0…+100%, 2–5×, > 5× |
+| `pnl_stat.avg_holding_period` | average holding period, sec |
+| `common.tags`, `common.twitter_username`, `common.twitter_fans_num`, `common.created_at` | profile |
+| `common.fund_from_address`, `common.fund_amount`, `common.fund_from_ts` | **who funded the wallet**, for linking sybils |
 
-`unrealized_profit` в `stats` нет — он в `profits`.
+`unrealized_profit` is not in `stats`; it is in `profits`.
 
-## `portfolio profits` — батч работает (POST `/v1/user/wallet_profits`)
+## `portfolio profits`: batch works (POST `/v1/user/wallet_profits`)
 
-`{ list: [...] }`, по записи на каждый кошелёк (проверено на 5). Периоды `1d / 7d / 30d / all`. Поля (строки):
+`{ list: [...] }`, one record per wallet (verified with 5). Periods `1d / 7d / 30d / all`. Fields (strings):
 `wallet_address, realized_profit, realized_profit_cost, unrealized_profit, unrealized_profit_cost, total_realized_profit,
-total_realized_profit_cost, total_profit, total_cost, buy, sell`. Винрейта нет.
+total_realized_profit_cost, total_profit, total_cost, buy, sell`. No winrate.
 
-Итого для метрик: `pnl_7d/pnl_30d` — батчем через `profits` (до 100 кошельков, один запрос);
-`winrate_30d`, распределение доходностей и фандер — через `stats` поштучно, только для кандидатов.
+In total for metrics: `pnl_7d/pnl_30d` come as a batch via `profits` (up to 100 wallets, one request);
+`winrate_30d`, the return distribution and the funder come via `stats` one wallet at a time, for candidates only.
 
 ## `portfolio activity`
 
-`{ activities: Activity[], next }`, 50 записей на страницу, новые сверху. Поля: `wallet, tx_hash, timestamp, event_type (buy/sell/…),
+`{ activities: Activity[], next }`, 50 records per page, newest first. Fields: `wallet, tx_hash, timestamp, event_type (buy/sell/…),
 token.{address,symbol,total_supply}, token_amount, quote_amount, cost_usd, buy_cost_usd, price_usd, is_open_or_close,
 quote_address, quote_token, gas_usd, dex_usd, priority_fee, tip_fee, launchpad, launchpad_platform`.
-Для кошелька с 150 сделками по токену первая покупка лежит на 3-й странице — дорого (вес 3 × страницы). Используем редко.
+For a wallet with 150 trades in a token, the first buy is on page 3, which is expensive (weight 3 × pages). Use rarely.
 
-## Наблюдения по качеству (выборка из 5 «smartmoney» без тега arbitrager)
+## Quality observations (sample of 5 "smartmoney" wallets without the arbitrager tag)
 
-| кошелёк | покупок за 30 д | winrate | доходность | вывод |
+| wallet | buys in 30 d | winrate | return | conclusion |
 |---|---|---|---|---|
-| AJcX…M4gs | 3 193 | 45% | +1.3% на $470k оборота | арбитраж/маркетмейкинг |
-| 72NW…     | 34 981 | — | +0.7% на $7.2M | бот |
-| 8hSh…     | 9 004 | — | +1% на $3.5M | бот |
+| AJcX…M4gs | 3 193 | 45% | +1.3% on $470k turnover | arbitrage/market making |
+| 72NW…     | 34 981 | — | +0.7% on $7.2M | bot |
+| 8hSh…     | 9 004 | — | +1% on $3.5M | bot |
 
-Фильтр «> 300 сделок в сутки» из ТЗ отсечёт их, но метрики надо считать по `buy` из `stats`, а не только по своим записям.
+The spec's "> 300 trades per day" filter would cut these out, but metrics must be computed from `buy` in `stats`, not only from our own records.

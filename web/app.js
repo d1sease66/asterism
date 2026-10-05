@@ -10,7 +10,7 @@ const ease = (t) => 1 - Math.pow(1 - clamp(t), 3);
 const DPR = () => Math.min(2, window.devicePixelRatio || 1);
 
 // ---------- format ----------
-const nf = new Intl.NumberFormat('ru-RU');
+const nf = new Intl.NumberFormat('en-US');
 function usd(v) {
   if (v == null || !Number.isFinite(+v)) return '—';
   v = +v;
@@ -23,12 +23,12 @@ const short = (a) => (a ? a.slice(0, 4) + '…' + a.slice(-4) : '');
 function ago(ts) {
   if (!ts) return '—';
   const s = Math.max(0, Date.now() / 1000 - ts);
-  if (s < 3600) return Math.max(1, Math.round(s / 60)) + ' мин';
-  if (s < 86400) return Math.round(s / 3600) + ' ч';
-  return Math.round(s / 86400) + ' д';
+  if (s < 3600) return Math.max(1, Math.round(s / 60)) + 'm ago';
+  if (s < 86400) return Math.round(s / 3600) + 'h ago';
+  return Math.round(s / 86400) + 'd ago';
 }
 function hhmm(ts) {
-  return new Date(ts * 1000).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow' });
+  return new Date(ts * 1000).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' UTC';
 }
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -40,9 +40,9 @@ function hash(str, seed = 0x811c9dc5) {
   return (h >>> 0) / 4294967296;
 }
 const REASONS = {
-  'tag:wash_trader': 'wash-трейдинг', 'tag:arbitrager': 'арбитраж', 'tag:dex_bot': 'DEX-бот', 'tag:bundler': 'бандлер',
-  'tag:rat_trader': 'инсайдер', 'tag:sandwich_bot': 'сэндвич-бот', 'tag:sniper': 'снайпер',
-  trades_per_day: '> 300 сделок в сутки', median_hold: 'удержание < 60 с', kol_dumper: 'KOL-дампер',
+  'tag:wash_trader': 'wash trader', 'tag:arbitrager': 'arbitrage', 'tag:dex_bot': 'DEX bot', 'tag:bundler': 'bundler',
+  'tag:rat_trader': 'insider', 'tag:sandwich_bot': 'sandwich bot', 'tag:sniper': 'sniper',
+  trades_per_day: '> 300 trades a day', median_hold: 'holds < 60 s', kol_dumper: 'KOL dumper',
 };
 const reason = (r) => REASONS[r] || r || '';
 
@@ -76,7 +76,7 @@ function renderHud() {
     $('[data-k="noise"]').textContent = sky.stars.length ? Math.round((noise / sky.stars.length) * 100) + '%' : '—';
     setNum('asterisms', sky.asterisms.length);
   }
-  if (sum?.watching_since) $('[data-since]').textContent = 'Наблюдаем с ' + hhmm(sum.watching_since) + ' МСК · ' + nf.format(sum.wallets) + ' кошельков в базе';
+  if (sum?.watching_since) $('[data-since]').textContent = 'Watching since ' + hhmm(sum.watching_since) + ' · ' + nf.format(sum.wallets) + ' wallets tracked';
 }
 function setNum(key, value) {
   const el = $(`[data-k="${key}"]`);
@@ -105,8 +105,8 @@ function renderSignals() {
       const now = s.price_24h && s.price_at_signal ? s.price_24h / s.price_at_signal : null;
       return `<tr><td class="muted">${hhmm(s.created_at)}</td><td>${tok(s.symbol, s.logo, s.token)}</td>
         <td>${tiers(ws.map((w) => w.tier))}</td><td class="r muted">—</td><td class="r">${usd(s.mc_at_signal)}</td>
-        <td class="r ${max >= 2 ? 'up' : ''}">${max ? '×' + max.toFixed(1) : '<span class="muted">идёт</span>'}</td>
-        <td class="r ${now == null ? '' : now >= 1 ? 'up' : 'down'}">${now ? '×' + now.toFixed(2) : '—'}</td></tr>`;
+        <td class="r ${max >= 2 ? 'up' : ''}">${max ? max.toFixed(1) + '×' : '<span class="muted">tracking</span>'}</td>
+        <td class="r ${now == null ? '' : now >= 1 ? 'up' : 'down'}">${now ? now.toFixed(2) + '×' : '—'}</td></tr>`;
     }).join('');
     return;
   }
@@ -114,11 +114,11 @@ function renderSignals() {
   const raw = state.sky?.asterisms || [];
   empty.hidden = false;
   empty.innerHTML = raw.length
-    ? '<b>Сигналов пока нет — ранги ещё считаются.</b>Ниже сырые совпадения: 3+ кошелька без пометки «бот» купили один токен за 30 минут. Это не сигналы.'
-    : '<b>Сигналов пока нет.</b>Первые астеризмы появятся после первого пересчёта рангов кошельков.';
+    ? '<b>No signals yet — ranks are still being computed.</b>Below are raw matches: 3+ wallets not flagged as bots bought one token within 30 minutes. These are not signals.'
+    : '<b>No signals yet.</b>The first asterisms appear after the first wallet scoring run.';
   body.innerHTML = raw.map((a) => `<tr><td class="muted">${hhmm(a.end)}</td><td>${tok(a.symbol, a.logo, a.token)}</td>
     <td>${tiers(a.wallets.map(() => null))} <span class="muted">${a.wallets.length}</span></td><td class="r">${usd(a.usd)}</td>
-    <td class="r muted">—</td><td class="r muted">сырое</td><td class="r muted">—</td></tr>`).join('');
+    <td class="r muted">—</td><td class="r muted">raw</td><td class="r muted">—</td></tr>`).join('');
 }
 function tok(symbol, logo, address) {
   const img = logo ? `<img src="${esc(logo)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<img alt="">';
@@ -150,10 +150,10 @@ function renderWallets() {
   const list = groups[state.tab].slice(0, 100);
   const body = $('[data-table="wallets"] tbody');
   const empty = $('[data-empty="wallets"]');
-  $('[data-col="metric"]').textContent = state.tab === 'x' ? 'Причина' : 'Hit ×2 / 24 ч';
+  $('[data-col="metric"]').textContent = state.tab === 'x' ? 'Reason' : 'Hit 2× / 24h';
   body.innerHTML = list.map((w, i) => `<tr>
     <td class="muted">${i + 1}</td>
-    <td><span class="addr" data-copy="${esc(w.address)}" title="Скопировать">${esc(w.address)}</span></td>
+    <td><span class="addr" data-copy="${esc(w.address)}" title="Copy">${esc(w.address)}</span></td>
     <td>${w.twitter_username ? `<a href="https://x.com/${esc(w.twitter_username)}" target="_blank" rel="noopener">@${esc(w.twitter_username)}</a>` : '<span class="muted">—</span>'}</td>
     <td class="r">${state.tab === 'x' ? `<span class="tag">${esc(reason(w.excluded_reason))}</span>` : pct(w.hit_rate_2x_24h)}</td>
     <td class="r ${w.pnl_30d > 0 ? 'up' : w.pnl_30d < 0 ? 'down' : ''}">${usd(w.pnl_30d)}</td>
@@ -162,8 +162,8 @@ function renderWallets() {
   empty.hidden = list.length > 0;
   if (!list.length) {
     empty.innerHTML = state.summary?.scored
-      ? '<b>В этой группе пусто.</b>'
-      : '<b>Ранги ещё не посчитаны.</b>Первый пересчёт — после суток наблюдения: нужны исходы покупок за 24 часа.';
+      ? '<b>Nothing in this group yet.</b>'
+      : '<b>Ranks are not computed yet.</b>The first scoring run needs a full day of data: every buy has to show its 24-hour outcome.';
   }
 }
 document.addEventListener('click', (e) => {
@@ -292,7 +292,7 @@ const Sky = (() => {
         const top = pts.reduce((m, p) => (p[1] < m[1] ? p : m), pts[0]);
         ctx.globalAlpha = .95; ctx.fillStyle = '#f4b860'; ctx.font = '500 12px "JetBrains Mono", monospace';
         const mins = Math.max(1, Math.round((gr.end - gr.start) / 60));
-        const text = `$${gr.symbol || short(gr.token)} · ${gr.wallets.length} за ${mins} мин`;
+        const text = `$${gr.symbol || short(gr.token)} · ${gr.wallets.length} in ${mins} min`;
         const tw = ctx.measureText(text).width;
         const lx = Math.max(12, Math.min(w - tw - 12, top[0] + 10));
         ctx.fillText(text, lx, Math.max(16, top[1] - 12));
@@ -319,8 +319,8 @@ const Sky = (() => {
     const [x, y] = pos(best);
     tip.hidden = false;
     tip.style.left = x + 'px'; tip.style.top = y + 'px';
-    const label = best.excluded ? `<span class="t">шум · ${esc(reason(best.excluded))}</span>` : best.tier === 'c' ? 'без ранга' : 'ранг ' + best.tier;
-    tip.innerHTML = `<b>${short(best.a)}</b>${best.x ? ' · @' + esc(best.x) : ''}${best.kol ? ' · KOL' : ''}<br>${label}<br>${best.n} сделок · ${usd(best.vol)} · ${ago(best.last)} назад`;
+    const label = best.excluded ? `<span class="t">noise · ${esc(reason(best.excluded))}</span>` : best.tier === 'c' ? 'unranked' : 'rank ' + best.tier;
+    tip.innerHTML = `<b>${short(best.a)}</b>${best.x ? ' · @' + esc(best.x) : ''}${best.kol ? ' · KOL' : ''}<br>${label}<br>${best.n} trades · ${usd(best.vol)} · ${ago(best.last)}`;
   }
 
   new ResizeObserver(resize).observe(section);
