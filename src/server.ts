@@ -4,11 +4,14 @@ import { openDb } from './db.js';
 import { GmgnClient } from './gmgn/client.js';
 import { startHttp } from './http.js';
 import { logger } from './log.js';
+import { signals, sky, summary, wallets } from './public.js';
 import { collectorStats } from './stats.js';
 
 const log = logger('main');
 
 const db = openDb(DATA_DIR);
+// COLLECTOR=0 runs the HTTP side only (site preview next to a live collector).
+const collecting = process.env.COLLECTOR !== '0';
 const client = new GmgnClient();
 
 const collectors = [
@@ -19,10 +22,14 @@ const collectors = [
 startHttp(PORT, {
   '/health': () => ({ ok: true }),
   '/api/stats': (url) => collectorStats(db, client, Number(url.searchParams.get('window')) || 3600),
-});
+  '/api/public/summary': () => summary(db),
+  '/api/public/sky': () => sky(db),
+  '/api/public/signals': () => signals(db),
+  '/api/public/wallets': () => wallets(db),
+}, 'web');
 
-collectors.forEach((collector) => collector.start());
-log.info(`started; data in ${DATA_DIR}`);
+if (collecting) collectors.forEach((collector) => collector.start());
+log.info(`started${collecting ? '' : ' (collector off)'}; data in ${DATA_DIR}`);
 
 function shutdown(signal: string): void {
   log.info(`${signal}: stopping`);
