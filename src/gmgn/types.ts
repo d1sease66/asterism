@@ -76,6 +76,8 @@ export interface TokenTrader {
 export interface RankItem {
   address: string;
   symbol: string;
+  price?: number | string;
+  total_supply?: number | string;
   market_cap: number;
   liquidity: number;
   history_highest_market_cap: number;
@@ -141,9 +143,11 @@ export interface WalletActivity {
   tx_hash: string;
   timestamp: number;
   event_type: string;
-  token: { address: string; symbol?: string };
+  token: { address: string; symbol?: string; logo?: string; total_supply?: string };
   token_amount: Num;
   cost_usd: Num;
+  buy_cost_usd?: Num;
   price_usd: Num;
   is_open_or_close: number;
+  launchpad?: string;
 }

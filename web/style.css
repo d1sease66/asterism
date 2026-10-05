@@ -349,3 +349,55 @@ body::after {
   .tape-rows li { animation: none; }
   .loader { display: none; }
 }
+
+/* ---------- v3: real transactions ---------- */
+.tape-rows .who { cursor: pointer; }
+.tape-rows .who:hover { color: var(--star); text-decoration: underline; text-underline-offset: 3px; }
+.tape-rows a.usd:hover { color: var(--ember); }
+.tape-rows a.usd::after, .tx-link::after { content: ' ↗'; color: var(--s38); font-size: 10px; }
+.table tbody tr[data-wallet] { cursor: pointer; }
+.src { font: 500 9.5px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--s38); margin-left: 8px; }
+.src.d { color: var(--ember); }
+
+.drawer { position: fixed; inset: 0; z-index: 90; }
+.drawer[hidden] { display: none; }
+.drawer-scrim { position: absolute; inset: 0; background: rgba(3, 5, 10, .6); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); animation: fade .3s var(--ease) both; }
+.drawer-panel {
+  position: absolute; top: 0; right: 0; bottom: 0; width: min(560px, 100%); overflow-y: auto; overscroll-behavior: contain;
+  background: linear-gradient(180deg, #0d1426, #080c17); box-shadow: -1px 0 0 var(--s08), -40px 0 120px -40px rgba(0, 0, 0, .9);
+  padding: 28px clamp(18px, 3vw, 32px) 40px; animation: slidein .45s var(--ease) both;
+}
+@keyframes fade { from { opacity: 0; } }
+@keyframes slidein { from { transform: translateX(40px); opacity: 0; } }
+.drawer-x { position: sticky; top: 0; float: right; width: 36px; height: 36px; border-radius: 10px; border: 0; cursor: pointer; font: 400 22px/1 var(--disp); color: var(--s62); background: var(--s04); box-shadow: inset 0 0 0 1px var(--s08); }
+.drawer-x:hover { color: var(--star); }
+.d-kicker { font: 500 10.5px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--s38); margin: 6px 0 14px; display: flex; gap: 10px; align-items: center; }
+.d-addr { font: 500 15px/1.4 var(--mono); color: var(--star); word-break: break-all; margin: 0 0 6px; cursor: copy; }
+.d-addr.copied { color: var(--ember); }
+.d-links { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 22px; }
+.d-links a { font: 500 12px/1 var(--disp); padding: 9px 12px; border-radius: 10px; background: var(--s04); box-shadow: inset 0 0 0 1px var(--s08); color: var(--s84); }
+.d-links a:hover { color: var(--star); box-shadow: inset 0 0 0 1px var(--s38); }
+.d-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--s08); border-radius: 14px; overflow: hidden; margin-bottom: 26px; }
+.d-stats div { background: rgba(11, 17, 32, .9); padding: 12px; }
+.d-stats span { display: block; font: 500 9.5px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--s38); }
+.d-stats b { display: block; margin-top: 7px; font: 600 18px/1 var(--disp); color: var(--star); font-variant-numeric: tabular-nums; }
+.d-h { font: 700 16px/1 var(--disp); letter-spacing: -.02em; color: var(--star); margin: 0 0 10px; display: flex; justify-content: space-between; align-items: baseline; }
+.d-h small { font: 500 10.5px/1 var(--mono); letter-spacing: .08em; color: var(--s38); }
+.d-list { list-style: none; margin: 0 0 26px; padding: 0; border-radius: 14px; box-shadow: inset 0 0 0 1px var(--s08); overflow: hidden; }
+.d-list li { display: grid; grid-template-columns: 74px 38px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--s08); font: 400 12px/1.3 var(--mono); color: var(--s84); }
+.d-list li:first-child { border-top: 0; }
+.d-list.early li { grid-template-columns: minmax(0, 1fr) auto; }
+.d-list .tm { color: var(--s38); font-size: 11px; }
+.d-list .sym { display: flex; align-items: center; gap: 7px; color: var(--star); font: 600 13px/1 var(--disp); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.d-list .sym img { width: 18px; height: 18px; border-radius: 50%; background: var(--s08); flex: none; }
+.d-list .note { display: block; margin-top: 5px; font: 400 11px/1.3 var(--mono); color: var(--s38); }
+.d-list .r { text-align: right; color: var(--star); }
+.tx-link { color: var(--star); }
+.tx-link:hover { color: var(--ember); }
+.d-foot { font: 400 11px/1.6 var(--mono); color: var(--s38); }
+.d-empty { padding: 18px 12px; color: var(--s38); font: 400 12px/1.5 var(--mono); }
+@media (max-width: 900px) {
+  .d-stats { grid-template-columns: repeat(2, 1fr); }
+  .d-list li { grid-template-columns: 58px 34px minmax(0, 1fr) auto; font-size: 11px; }
+}
+.d-list .flag { font: 500 9px/1 var(--mono); letter-spacing: .08em; color: var(--ember); }

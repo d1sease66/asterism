@@ -135,6 +135,7 @@ function walletGroups() {
     B: all.filter((w) => !w.excluded_reason && w.tier === 'B'),
     C: all.filter((w) => !w.excluded_reason && w.tier === 'C'),
     kol: all.filter((w) => !w.excluded_reason && w.is_kol),
+    d: all.filter((w) => w.discovered_at).sort((a, b) => b.early_hits - a.early_hits),
     x: all.filter((w) => w.excluded_reason),
   };
 }
@@ -144,17 +145,17 @@ function renderWallets() {
     b.dataset.label ||= b.textContent;
     b.innerHTML = `${b.dataset.label}<span class="c">${groups[b.dataset.tab].length}</span>`;
   });
-  if (!state.tab) state.tab = ['A', 'B', 'C', 'kol', 'x'].find((t) => groups[t].length) || 'A';
+  if (!state.tab) state.tab = ['A', 'B', 'C', 'd', 'kol', 'x'].find((t) => groups[t].length) || 'A';
   $$('.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === state.tab)));
   const list = groups[state.tab].slice(0, 100);
   const body = $('[data-table="wallets"] tbody');
   const empty = $('[data-empty="wallets"]');
-  $('[data-col="metric"]').textContent = state.tab === 'x' ? 'Reason' : 'Hit 2× / 24h';
-  body.innerHTML = list.map((w, i) => `<tr>
+  $('[data-col="metric"]').textContent = state.tab === 'x' ? 'Reason' : state.tab === 'd' ? 'Early in' : 'Hit 2× / 24h';
+  body.innerHTML = list.map((w, i) => `<tr data-wallet="${esc(w.address)}">
     <td class="muted">${i + 1}</td>
-    <td><span class="addr" data-copy="${esc(w.address)}" title="Copy">${esc(w.address)}</span></td>
+    <td><span class="addr" data-copy="${esc(w.address)}" title="Copy">${esc(w.address)}</span>${w.discovered_at ? `<span class="src d">early ×${w.early_hits}</span>` : ''}</td>
     <td>${w.twitter_username ? `<a href="https://x.com/${esc(w.twitter_username)}" target="_blank" rel="noopener">@${esc(w.twitter_username)}</a>` : '<span class="muted">—</span>'}</td>
-    <td class="r">${state.tab === 'x' ? `<span class="tag">${esc(reason(w.excluded_reason))}</span>` : pct(w.hit_rate_2x_24h)}</td>
+    <td class="r">${state.tab === 'x' ? `<span class="tag">${esc(reason(w.excluded_reason))}</span>` : state.tab === 'd' ? `${w.early_hits} winners` : pct(w.hit_rate_2x_24h)}</td>
     <td class="r ${w.pnl_30d > 0 ? 'up' : w.pnl_30d < 0 ? 'down' : ''}">${usd(w.pnl_30d)}</td>
     <td class="r">${pct(w.winrate_30d)}</td>
     <td class="r muted">${ago(w.last_seen)}</td></tr>`).join('');
@@ -169,6 +170,10 @@ document.addEventListener('click', (e) => {
   const tab = e.target.closest('.tabs button');
   if (tab) { state.tab = tab.dataset.tab; renderWallets(); return; }
   const copy = e.target.closest('[data-copy]');
+  if (!copy) {
+    const walletEl = e.target.closest('[data-wallet]');
+    if (walletEl && !e.target.closest('a')) { Drawer.open(walletEl.dataset.wallet); return; }
+  }
   if (copy) {
     navigator.clipboard?.writeText(copy.dataset.copy).then(() => {
       copy.classList.add('copied');
@@ -359,13 +364,25 @@ const Sky = (() => {
     tip.hidden = false;
     tip.style.left = x + 'px'; tip.style.top = y + 'px';
     const label = best.excluded ? `<span class="t">noise · ${esc(reason(best.excluded))}</span>` : best.tier === 'c' ? 'unranked' : 'rank ' + best.tier;
-    tip.innerHTML = `<b>${short(best.a)}</b>${best.x ? ' · @' + esc(best.x) : ''}${best.kol ? ' · KOL' : ''}<br>${label}<br>${best.n} trades · ${usd(best.vol)} · ${ago(best.last)}`;
+    tip.innerHTML = `<b>${short(best.a)}</b>${best.x ? ' · @' + esc(best.x) : ''}${best.kol ? ' · KOL' : ''}<br>${label}<br>${best.n} trades · ${usd(best.vol)} · ${ago(best.last)}<br><span class="t">click for transactions</span>`;
   }
 
   new ResizeObserver(resize).observe(section);
   new IntersectionObserver(([e]) => (visible = e.isIntersecting)).observe(section);
   section.addEventListener('pointermove', hover);
   section.addEventListener('pointerleave', () => { tip.hidden = true; mouse.x = mouse.y = -1; });
+  canvas.style.cursor = 'crosshair';
+  canvas.addEventListener('click', (e) => {
+    const r = canvas.getBoundingClientRect();
+    const mx = e.clientX - r.left, my = e.clientY - r.top;
+    let best = null, bd = 196;
+    for (const s of stars) {
+      const [x, y] = pos(s);
+      const d = (x - mx) ** 2 + (y - my) ** 2;
+      if (d < bd) { bd = d; best = s; }
+    }
+    if (best) Drawer.open(best.a);
+  });
   requestAnimationFrame(loop);
   return { setData, flare };
 })();
@@ -522,6 +539,76 @@ const Sky = (() => {
   requestAnimationFrame(() => h1.classList.add('in'));
 })();
 
+// ---------- wallet drawer: profile + real transactions ----------
+const Drawer = (() => {
+  const root = $('.drawer');
+  const body = $('.drawer-body', root);
+  let current = null;
+  const SOURCE = { gmgn_sm: 'GMGN smart money', gmgn_kol: 'GMGN KOL feed', discovery: 'Discovered', manual: 'Manual' };
+  const TXSRC = { gmgn_sm: 'feed', gmgn_kol: 'kol', gmgn_activity: 'history' };
+
+  function close() {
+    root.hidden = true;
+    current = null;
+    window.__lenis?.start();
+    document.documentElement.style.overflow = '';
+  }
+
+  async function open(address) {
+    if (!address) return;
+    current = address;
+    root.hidden = false;
+    window.__lenis?.stop();
+    document.documentElement.style.overflow = 'hidden';
+    body.innerHTML = `<p class="d-kicker">Wallet</p><p class="d-addr">${esc(address)}</p><p class="d-empty">Loading transactions…</p>`;
+    let data;
+    try { data = await get('/api/public/wallet?a=' + encodeURIComponent(address)); } catch { data = { error: 'load failed' }; }
+    if (current !== address) return;
+    if (data.error) { body.innerHTML += `<p class="d-empty">${esc(data.error)}</p>`; return; }
+    render(data);
+  }
+
+  function render({ wallet: w, totals, early, trades, delay_min }) {
+    const tier = w.excluded_reason ? 'X' : w.tier || '·';
+    const status = w.excluded_reason ? `<span class="tag">dimmed · ${esc(reason(w.excluded_reason))}</span>` : w.tier ? 'rank ' + w.tier : 'unranked';
+    const src = w.discovered_at ? 'Discovered' + (w.source !== 'discovery' ? ' · ' + (SOURCE[w.source] || w.source) : '') : SOURCE[w.source] || w.source;
+    const tok = (t) => `${t.logo ? `<img src="${esc(t.logo)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">` : '<img alt="">'}$${esc(t.symbol || short(t.token))}`;
+    const earlyHtml = early.length ? `
+      <h3 class="d-h">Early in winners <small>entry ÷ ATH market cap</small></h3>
+      <ul class="d-list early">${early.map((e) => `<li>
+        <span><span class="sym">${tok(e)}</span><span class="note">ATH ${usd(e.ath_mc)} · entered at ${(e.entry_ratio * 100).toFixed(1)}% of ATH · in ${usd(e.cost)}</span></span>
+        <a class="r tx-link" href="https://gmgn.ai/sol/token/${esc(e.token)}?maker=${esc(w.address)}" target="_blank" rel="noopener">${usd(e.profit)}</a></li>`).join('')}</ul>` : '';
+    const txHtml = trades.length ? `<ul class="d-list">${trades.map((t) => `<li>
+        <span class="tm">${new Date(t.ts * 1000).toISOString().slice(5, 16).replace('T', ' ')}</span>
+        <span class="side-${t.side}">${t.side === 'buy' ? 'BUY' : 'SELL'}</span>
+        <span class="sym">${tok(t)}${t.full ? `<span class="flag">${t.side === 'buy' ? 'OPEN' : 'EXIT'}</span>` : ''}<span class="src">${TXSRC[t.source] || ''}</span></span>
+        <a class="r tx-link" href="https://solscan.io/tx/${esc(t.tx)}" target="_blank" rel="noopener" title="View on Solscan">${usd(t.usd)}</a></li>`).join('')}</ul>`
+      : '<p class="d-empty">No transactions older than the public delay yet.</p>';
+    body.innerHTML = `
+      <p class="d-kicker"><span class="pill ${tier}">${tier === 'X' ? '×' : tier}</span>${status} · ${esc(src)}${w.is_kol ? ' · KOL' : ''}</p>
+      <p class="d-addr" data-copy="${esc(w.address)}" title="Copy address">${esc(w.address)}</p>
+      ${w.twitter_username ? `<p class="d-kicker"><a href="https://x.com/${esc(w.twitter_username)}" target="_blank" rel="noopener">@${esc(w.twitter_username)}</a></p>` : ''}
+      <div class="d-links">
+        <a href="https://solscan.io/account/${esc(w.address)}" target="_blank" rel="noopener">Solscan ↗</a>
+        <a href="https://gmgn.ai/sol/address/${esc(w.address)}" target="_blank" rel="noopener">GMGN ↗</a>
+      </div>
+      <div class="d-stats">
+        <div><span>Trades</span><b>${nf.format(totals.n || 0)}</b></div>
+        <div><span>Buys</span><b>${nf.format(totals.buys || 0)}</b></div>
+        <div><span>Tokens</span><b>${nf.format(totals.tokens || 0)}</b></div>
+        <div><span>Volume</span><b>${usd(totals.usd || 0)}</b></div>
+      </div>
+      ${earlyHtml}
+      <h3 class="d-h">Transactions <small>latest ${trades.length} · ${delay_min} min delay</small></h3>
+      ${txHtml}
+      <p class="d-foot">Every row links to the on-chain transaction on Solscan. “feed” rows come from GMGN's live feeds, “history” rows from the wallet's own activity.</p>`;
+  }
+
+  root.addEventListener('click', (e) => { if (e.target.closest('[data-close]')) close(); });
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && !root.hidden) close(); });
+  return { open, close };
+})();
+
 // ---------- live tape: replay the delayed feed at its real pace ----------
 const Tape = (() => {
   const list = $('.tape-rows');
@@ -574,8 +661,9 @@ const Tape = (() => {
     const time = new Date(tr.ts * 1000).toISOString().slice(11, 19);
     const img = tr.logo ? `<img src="${esc(tr.logo)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">` : '<img alt="">';
     li.innerHTML = `<span class="tm">${time}</span><span class="pill ${tier}" title="${tr.noise ? esc(reason(tr.noise)) : 'rank ' + tier}">${tier === 'X' ? '×' : tier}</span>`
-      + `<span class="who">${who}</span><span class="side-${tr.side}">${tr.side === 'buy' ? 'BUY' : 'SELL'}</span>`
-      + `<span class="sym">${img}$${esc(tr.s || short(tr.t))}${flag}</span><span class="usd">${usd(tr.usd)}</span>`;
+      + `<span class="who" data-wallet="${esc(tr.w)}" title="Open wallet">${who}</span><span class="side-${tr.side}">${tr.side === 'buy' ? 'BUY' : 'SELL'}</span>`
+      + `<span class="sym">${img}$${esc(tr.s || short(tr.t))}${flag}</span>`
+      + `<a class="usd" href="https://solscan.io/tx/${esc(tr.tx)}" target="_blank" rel="noopener" title="View transaction on Solscan">${usd(tr.usd)}</a>`;
     li.hidden = hideNoise && Boolean(tr.noise);
     list.prepend(li);
     while (list.children.length > ROWS * 2) list.lastChild.remove();
@@ -731,6 +819,7 @@ const Pulse = (() => {
 
   if (!reduced && window.Lenis) {
     const lenis = new window.Lenis({ lerp: .1, smoothWheel: true });
+    window.__lenis = lenis;
     const raf = (t) => { lenis.raf(t); requestAnimationFrame(raf); };
     requestAnimationFrame(raf);
     document.addEventListener('click', (e) => {

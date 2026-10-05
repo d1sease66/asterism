@@ -126,6 +126,39 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX poll_log_feed_ts ON poll_log(feed, ts);
   `,
+  `
+  -- Discovery: winner tokens we scanned and the early buyers found in them.
+  CREATE TABLE discovery_tokens (
+    address TEXT PRIMARY KEY,
+    symbol TEXT,
+    ath_mc REAL NOT NULL,
+    mc REAL,
+    supply REAL,
+    created_at INTEGER,
+    processed_at INTEGER NOT NULL,
+    traders INTEGER NOT NULL,
+    hits INTEGER NOT NULL
+  );
+  CREATE TABLE discovery_hits (
+    wallet TEXT NOT NULL,
+    token TEXT NOT NULL,
+    entry_ratio REAL NOT NULL,         -- avg entry market cap / ATH market cap
+    profit REAL NOT NULL,
+    cost REAL NOT NULL,
+    start_ts INTEGER,
+    found_at INTEGER NOT NULL,
+    PRIMARY KEY (wallet, token)
+  );
+  CREATE INDEX discovery_hits_wallet ON discovery_hits(wallet);
+  ALTER TABLE wallets ADD COLUMN discovered_at INTEGER;
+  -- Last activity backfill per wallet.
+  CREATE TABLE wallet_sync (
+    wallet TEXT PRIMARY KEY,
+    synced_at INTEGER NOT NULL,
+    newest_ts INTEGER,
+    trades INTEGER NOT NULL DEFAULT 0
+  );
+  `,
 ];
 
 export function openDb(dataDir: string, file = 'swa.sqlite'): DB {

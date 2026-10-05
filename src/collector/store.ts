@@ -1,5 +1,5 @@
 import type { DB } from '../db.js';
-import { FEED_SOURCE, type FeedName, type NormalizedTrade, tradeKey } from './normalize.js';
+import { FEED_SOURCE, type NormalizedTrade, type TradeSource, tradeKey } from './normalize.js';
 
 // Writes feed trades, wallets and tokens. Insert-or-ignore on the trade key
 // makes repeated polls idempotent.
@@ -44,8 +44,12 @@ export class TradeStore {
     return this.hasTrade.get(tx, wallet, token, side) !== undefined;
   }
 
-  /** Stores a batch; returns the trades that were new. */
-  save(feed: FeedName, trades: NormalizedTrade[], now = Math.floor(Date.now() / 1000)): NormalizedTrade[] {
+  /**
+   * Stores a batch; returns the trades that were new. Activity backfills
+   * carry no wallet tags, so they must not touch the wallet row.
+   */
+  save(feed: TradeSource, trades: NormalizedTrade[], now = Math.floor(Date.now() / 1000), options: { updateWallets?: boolean } = {}): NormalizedTrade[] {
+    const updateWallets = options.updateWallets ?? true;
     const source = FEED_SOURCE[feed];
     const fresh: NormalizedTrade[] = [];
     const tagsByWallet = new Map<string, Set<string>>();
@@ -65,7 +69,7 @@ export class TradeStore {
       for (const trade of trades) {
         const result = this.insertTrade.run({ ...trade, route: trade.route ? 1 : 0, source, now });
         if (result.changes > 0) fresh.push(trade);
-        if (!seen.has(trade.wallet)) {
+        if (updateWallets && !seen.has(trade.wallet)) {
           seen.add(trade.wallet);
           const tags = [...(tagsByWallet.get(trade.wallet) ?? [])].sort();
           this.upsertWallet.run({

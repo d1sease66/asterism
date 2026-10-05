@@ -1,10 +1,11 @@
 import { DATA_DIR, PORT, POLL_KOL_MIN_SEC, POLL_KOL_SEC, POLL_SMARTMONEY_MAX_SEC, POLL_SMARTMONEY_MIN_SEC, POLL_SMARTMONEY_SEC } from './config.js';
 import { FeedCollector } from './collector/collector.js';
+import { Discovery } from './discovery/discovery.js';
 import { openDb } from './db.js';
 import { GmgnClient } from './gmgn/client.js';
 import { startHttp } from './http.js';
 import { logger } from './log.js';
-import { feed, pulse, signals, sky, summary, wallets } from './public.js';
+import { feed, pulse, signals, sky, summary, walletDetail, wallets } from './public.js';
 import { collectorStats } from './stats.js';
 
 const log = logger('main');
@@ -28,9 +29,30 @@ startHttp(PORT, {
   '/api/public/wallets': () => wallets(db),
   '/api/public/feed': (url) => feed(db, Number(url.searchParams.get('since')) || 0),
   '/api/public/pulse': () => pulse(db),
+  '/api/public/wallet': (url) => walletDetail(db, url.searchParams.get('a') ?? ''),
 }, 'web');
 
-if (collecting) collectors.forEach((collector) => collector.start());
+const discovery = new Discovery(db, client);
+const DISCOVERY_EVERY_MS = Number(process.env.DISCOVERY_EVERY_HOURS || 6) * 3600_000;
+const SYNC_EVERY_MS = 30 * 60_000;
+
+async function discoveryPass(): Promise<void> {
+  try {
+    await discovery.run();
+    await discovery.syncActivity();
+  } catch (error) {
+    log.error('discovery pass failed', error);
+  }
+}
+
+if (collecting) {
+  collectors.forEach((collector) => collector.start());
+  if (process.env.DISCOVERY !== '0') {
+    setTimeout(() => void discoveryPass(), 60_000);
+    setInterval(() => void discoveryPass(), DISCOVERY_EVERY_MS);
+    setInterval(() => void discovery.syncActivity().catch((error) => log.error('activity sync failed', error)), SYNC_EVERY_MS);
+  }
+}
 log.info(`started${collecting ? '' : ' (collector off)'}; data in ${DATA_DIR}`);
 
 function shutdown(signal: string): void {

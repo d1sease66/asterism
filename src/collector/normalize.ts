@@ -1,7 +1,9 @@
 import type { FeedTrade } from '../gmgn/types.js';
 
 export type FeedName = 'smartmoney' | 'kol';
-export const FEED_SOURCE: Record<FeedName, 'gmgn_sm' | 'gmgn_kol'> = { smartmoney: 'gmgn_sm', kol: 'gmgn_kol' };
+/** Where a trade came from: a live feed or a per-wallet activity backfill. */
+export type TradeSource = FeedName | 'activity';
+export const FEED_SOURCE: Record<TradeSource, 'gmgn_sm' | 'gmgn_kol' | 'gmgn_activity'> = { smartmoney: 'gmgn_sm', kol: 'gmgn_kol', activity: 'gmgn_activity' };
 
 // Tokens that show up as the middle leg of multi-hop swaps (SOL → cbBTC →
 // meme gives two "buy" records in one tx). Never a signal on their own.

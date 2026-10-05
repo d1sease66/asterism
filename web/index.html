@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=Instrument+Serif:ital@1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=11">
+  <link rel="stylesheet" href="/style.css?v=13">
   <script>document.documentElement.classList.add('js')</script>
 </head>
 <body>
@@ -157,6 +157,7 @@
         <button role="tab" data-tab="B">B</button>
         <button role="tab" data-tab="C">C</button>
         <button role="tab" data-tab="kol">KOL</button>
+        <button role="tab" data-tab="d">Discovered</button>
         <button role="tab" data-tab="x">Dimmed</button>
       </div>
       <div class="panel glow">
@@ -189,7 +190,15 @@
     </div>
   </footer>
 
+  <aside class="drawer" hidden>
+    <div class="drawer-scrim" data-close></div>
+    <div class="drawer-panel" role="dialog" aria-modal="true" aria-label="Wallet">
+      <button class="drawer-x" type="button" data-close aria-label="Close">×</button>
+      <div class="drawer-body"></div>
+    </div>
+  </aside>
+
   <script src="https://cdn.jsdelivr.net/npm/lenis@1.1.20/dist/lenis.min.js" defer></script>
-  <script src="/app.js?v=11" defer></script>
+  <script src="/app.js?v=13" defer></script>
 </body>
 </html>
