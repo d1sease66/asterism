@@ -4,7 +4,7 @@ import { openDb } from './db.js';
 import { GmgnClient } from './gmgn/client.js';
 import { startHttp } from './http.js';
 import { logger } from './log.js';
-import { signals, sky, summary, wallets } from './public.js';
+import { feed, pulse, signals, sky, summary, wallets } from './public.js';
 import { collectorStats } from './stats.js';
 
 const log = logger('main');
@@ -26,6 +26,8 @@ startHttp(PORT, {
   '/api/public/sky': () => sky(db),
   '/api/public/signals': () => signals(db),
   '/api/public/wallets': () => wallets(db),
+  '/api/public/feed': (url) => feed(db, Number(url.searchParams.get('since')) || 0),
+  '/api/public/pulse': () => pulse(db),
 }, 'web');
 
 if (collecting) collectors.forEach((collector) => collector.start());

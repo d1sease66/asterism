@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=Instrument+Serif:ital@1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=8">
+  <link rel="stylesheet" href="/style.css?v=11">
   <script>document.documentElement.classList.add('js')</script>
 </head>
 <body>
@@ -22,9 +22,10 @@
       <span>Asterism</span>
     </a>
     <nav class="nav" aria-label="Sections">
-      <a href="#method">Method</a>
-      <a href="#signals">Asterisms</a>
-      <a href="#wallets">Wallets</a>
+      <a href="#method"><i>01</i>Method</a>
+      <a href="#pulse"><i>02</i>Pulse</a>
+      <a href="#signals"><i>03</i>Asterisms</a>
+      <a href="#wallets"><i>04</i>Wallets</a>
     </nav>
     <a class="btn btn-sm" data-bot href="#final">Bot<span class="arrow">→</span></a>
   </header>
@@ -44,20 +45,29 @@
         </div>
       </div>
       <div class="side" data-reveal>
+        <div class="tape glow" aria-label="Live trade tape">
+          <div class="tape-head">
+            <span class="live"><i></i>Live tape</span>
+            <span class="tape-delay"><b data-delay>15</b> min delay</span>
+            <button class="tape-toggle" type="button" aria-pressed="false" data-tape-filter>Hide noise</button>
+          </div>
+          <ol class="tape-rows" aria-live="off"></ol>
+        </div>
+        <dl class="hud glow">
+          <div><dt>Wallets · 24h</dt><dd data-k="stars">—</dd></div>
+          <div><dt>Noise</dt><dd data-k="noise">—</dd></div>
+          <div><dt>Trades / min</dt><dd data-k="tpm">—</dd></div>
+        </dl>
         <div class="legend" aria-hidden="true">
           <span><i class="dot a"></i>A</span><span><i class="dot b"></i>B</span><span><i class="dot c"></i>C · unranked</span><span><i class="dot x"></i>noise</span><span><i class="ring"></i>KOL</span>
         </div>
-        <dl class="hud">
-          <div><dt>Stars · 24h</dt><dd data-k="stars">—</dd></div>
-          <div><dt>Noise</dt><dd data-k="noise">—</dd></div>
-          <div><dt>Asterisms</dt><dd data-k="asterisms">—</dd></div>
-        </dl>
       </div>
     </section>
 
     <!-- 2. Story: noise → asterism -->
     <section class="story" id="method" aria-label="Method">
       <div class="steps">
+        <p class="kicker story-kicker"><i>01</i>Method</p>
         <article class="step" data-step="0">
           <p class="num">01</p>
           <h2>100 trades in&nbsp;25&nbsp;seconds.</h2>
@@ -99,14 +109,34 @@
       </div>
     </section>
 
-    <!-- 3. Signals -->
+    <!-- 3. Pulse -->
+    <section class="block" id="pulse">
+      <div class="block-head">
+        <p class="kicker"><i>02</i>Pulse</p>
+        <h2 class="h2">The feed, <em>measured.</em></h2>
+        <p class="sub">Every trade GMGN labels smart money, in 15-minute buckets. White is what we keep. Red is what we dim.</p>
+      </div>
+      <div class="kpis">
+        <div class="kpi glow" data-reveal><span>Trades · 24h</span><b data-p="trades">—</b></div>
+        <div class="kpi glow" data-reveal><span>Wallets</span><b data-p="wallets">—</b></div>
+        <div class="kpi glow" data-reveal><span>Tokens</span><b data-p="tokens">—</b></div>
+        <div class="kpi glow" data-reveal><span>Kept volume</span><b data-p="usd">—</b></div>
+      </div>
+      <div class="panel chart glow" data-reveal>
+        <div class="chart-head"><span class="key"><i class="k-real"></i>kept</span><span class="key"><i class="k-noise"></i>dimmed</span><span class="chart-note" data-chart-note></span></div>
+        <canvas class="chart-canvas" aria-label="Trades per 15 minutes, last 24 hours"></canvas>
+        <div class="chart-tip" hidden></div>
+      </div>
+    </section>
+
+    <!-- 4. Signals -->
     <section class="block" id="signals">
       <div class="block-head">
-        <p class="kicker">Log</p>
+        <p class="kicker"><i>03</i>Log</p>
         <h2 class="h2">Asterisms</h2>
         <p class="sub">Every signal and what happened next. Published <b data-delay>15</b> minutes after the alert.</p>
       </div>
-      <div class="panel">
+      <div class="panel glow">
         <p class="empty" data-empty="signals" hidden></p>
         <table class="table" data-table="signals">
           <thead><tr><th>Time</th><th>Token</th><th>Wallets</th><th class="r">Size</th><th class="r">MC</th><th class="r">Max 24h</th><th class="r">Now</th></tr></thead>
@@ -115,10 +145,10 @@
       </div>
     </section>
 
-    <!-- 4. Wallets -->
+    <!-- 5. Wallets -->
     <section class="block" id="wallets">
       <div class="block-head">
-        <p class="kicker">Directory</p>
+        <p class="kicker"><i>04</i>Directory</p>
         <h2 class="h2">Wallets</h2>
         <p class="sub">Full addresses, rank, and why a wallet went dark. Re-scored daily.</p>
       </div>
@@ -129,7 +159,7 @@
         <button role="tab" data-tab="kol">KOL</button>
         <button role="tab" data-tab="x">Dimmed</button>
       </div>
-      <div class="panel">
+      <div class="panel glow">
         <table class="table" data-table="wallets">
           <thead><tr><th>#</th><th>Wallet</th><th>X</th><th class="r" data-col="metric">Hit 2× / 24h</th><th class="r">PnL 30d</th><th class="r">Win rate</th><th class="r">Active</th></tr></thead>
           <tbody></tbody>
@@ -138,7 +168,7 @@
       </div>
     </section>
 
-    <!-- 5. Final -->
+    <!-- 6. Final -->
     <section class="final" id="final">
       <div class="final-card" data-pop>
         <svg class="final-star" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5c.5 5.6 4.9 10 10.5 10.5-5.6.5-10 4.9-10.5 10.5C11.5 16.9 7.1 12.5 1.5 12 7.1 11.5 11.5 7.1 12 1.5Z"/></svg>
@@ -159,6 +189,7 @@
     </div>
   </footer>
 
-  <script src="/app.js?v=8" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/lenis@1.1.20/dist/lenis.min.js" defer></script>
+  <script src="/app.js?v=11" defer></script>
 </body>
 </html>

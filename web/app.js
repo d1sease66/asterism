@@ -74,7 +74,6 @@ function renderHud() {
     const noise = sky.stars.filter((s) => s.excluded).length;
     setNum('stars', sky.stars.length);
     $('[data-k="noise"]').textContent = sky.stars.length ? Math.round((noise / sky.stars.length) * 100) + '%' : '—';
-    setNum('asterisms', sky.asterisms.length);
   }
   if (sum?.watching_since) $('[data-since]').textContent = 'Watching since ' + hhmm(sum.watching_since) + ' · ' + nf.format(sum.wallets) + ' wallets tracked';
 }
@@ -121,7 +120,7 @@ function renderSignals() {
     <td class="r muted">—</td><td class="r muted">raw</td><td class="r muted">—</td></tr>`).join('');
 }
 function tok(symbol, logo, address) {
-  const img = logo ? `<img src="${esc(logo)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<img alt="">';
+  const img = logo ? `<img src="${esc(logo)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">` : '<img alt="">';
   return `<a class="tok" href="https://gmgn.ai/sol/token/${esc(address)}" target="_blank" rel="noopener">${img}$${esc(symbol || short(address))}</a>`;
 }
 function tiers(list) {
@@ -185,6 +184,9 @@ const Sky = (() => {
   const ctx = canvas.getContext('2d');
   const tip = $('.sky-tip');
   let w = 0, h = 0, stars = [], groups = [], visible = true, born = 0, mouse = { x: -1, y: -1, px: 0, py: 0 };
+  const byAddr = new Map();
+  const extra = new Map(); // wallets first seen on the live tape, kept across relayouts
+  const flares = [];
   // Pre-rendered glow sprite.
   const glow = document.createElement('canvas');
   glow.width = glow.height = 64;
@@ -208,7 +210,7 @@ const Sky = (() => {
     // Fixed slots keep asterisms apart and clear of the headline and HUD.
     const slots = mobile
       ? [[.3, .15], [.72, .25]]
-      : [[.6, .26], [.84, .22], [.5, .5], [.73, .5], [.4, .2], [.93, .42]];
+      : [[.44, .22], [.8, .13], [.63, .34], [.27, .12], [.5, .45], [.92, .3]];
     groups = state.sky.asterisms.slice(0, slots.length).map((a, i) => {
       const [sx, sy] = slots[i];
       const cx = w * (sx + (hash(a.token, 7) - .5) * .04);
@@ -217,7 +219,9 @@ const Sky = (() => {
     });
     const member = new Map();
     groups.forEach((gr) => gr.wallets.forEach((addr) => { if (!member.has(addr)) member.set(addr, gr); }));
-    stars = state.sky.stars.map((s) => {
+    const known = new Set(state.sky.stars.map((s) => s.a));
+    const live = [...extra.values()].filter((s) => !known.has(s.a));
+    stars = [...state.sky.stars, ...live].map((s) => {
       const gr = member.get(s.a);
       let x, y;
       if (gr) {
@@ -231,17 +235,40 @@ const Sky = (() => {
       const k = mobile ? 1 : 1.35;
       const base = { A: 2.6, B: 2.1, c: 1.5, C: 1.5, x: .95 }[tier] * k;
       const size = base + (tier === 'x' ? 0 : Math.min(1.4, Math.log10((s.vol || 0) + 10) * .28));
-      const star = { ...s, x, y, tier, size, depth: .3 + hash(s.a, 4) * .7, phase: hash(s.a, 6) * 6.28, speed: .6 + hash(s.a, 8) * 1.6, gr };
+      const star = { ...s, x, y, tier, size, depth: .3 + hash(s.a, 4) * .7, phase: hash(s.a, 6) * 6.28, speed: .6 + hash(s.a, 8) * 1.6, gr, hot: 0, born: s.born || 0 };
       if (gr) gr.members.push(star);
       return star;
     });
+    byAddr.clear();
+    stars.forEach((star) => byAddr.set(star.a, star));
     // Order members by angle so the asterism line reads as a shape, not a scribble.
     groups.forEach((gr) => gr.members.sort((p, q) => Math.atan2(p.y - gr.cy, p.x - gr.cx) - Math.atan2(q.y - gr.cy, q.x - gr.cx)));
   }
 
   function setData() {
+    const first = !stars.length;
     layout();
-    born = performance.now();
+    if (first) born = performance.now();
+  }
+
+  /** A trade from the tape: the wallet's star flares; unknown wallets appear. */
+  function flare(trade) {
+    const now = performance.now();
+    let star = byAddr.get(trade.w);
+    if (!star) {
+      const fresh = { a: trade.w, tier: trade.tier, score: null, kol: trade.kol, x: trade.x, n: 1, vol: trade.usd, last: trade.ts, excluded: trade.noise, born: now };
+      extra.set(trade.w, fresh);
+      if (extra.size > 600) extra.delete(extra.keys().next().value);
+      layout();
+      star = byAddr.get(trade.w);
+      if (!star) return;
+    }
+    star.hot = now;
+    star.n += 1;
+    star.vol += trade.usd;
+    star.last = trade.ts;
+    flares.push({ star, t0: now, color: trade.noise ? '240,138,122' : trade.side === 'buy' ? '244,184,96' : '238,241,248', big: trade.usd >= 1000 });
+    if (flares.length > 80) flares.shift();
   }
 
   function pos(s) {
@@ -257,7 +284,9 @@ const Sky = (() => {
     for (const s of stars) {
       const [x, y] = pos(s);
       const tw = reduced ? 1 : .72 + .28 * Math.sin(t * .001 * s.speed + s.phase);
-      const a = (s.tier === 'x' ? .26 : s.tier === 'A' ? 1 : s.tier === 'B' ? .9 : .74) * tw * intro;
+      const heat = s.hot ? clamp(1 - (t - s.hot) / 1400) : 0;
+      const fadeIn = s.born ? clamp((t - s.born) / 900) : 1;
+      const a = Math.min(1, (s.tier === 'x' ? .26 : s.tier === 'A' ? 1 : s.tier === 'B' ? .9 : .74) * tw * intro + heat * .7) * fadeIn;
       if (s.tier !== 'x') {
         const gs = s.size * (s.tier === 'A' ? 9 : s.tier === 'B' || s.gr ? 7 : 4.5);
         ctx.globalAlpha = a * (s.tier === 'A' || s.gr ? .6 : .32);
@@ -265,11 +294,21 @@ const Sky = (() => {
       }
       ctx.globalAlpha = a;
       ctx.fillStyle = s.gr ? '#ffe6bf' : '#eef1f8';
-      ctx.beginPath(); ctx.arc(x, y, s.size, 0, 6.283); ctx.fill();
+      ctx.beginPath(); ctx.arc(x, y, s.size * (1 + heat * .8), 0, 6.283); ctx.fill();
       if (s.kol && s.tier !== 'x') {
         ctx.globalAlpha = a * .8; ctx.strokeStyle = '#f4b860'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.arc(x, y, s.size + 3, 0, 6.283); ctx.stroke();
       }
+    }
+    // Flares: an expanding ring where a wallet just traded.
+    for (let i = flares.length - 1; i >= 0; i--) {
+      const f = flares[i];
+      const k = (t - f.t0) / (f.big ? 1600 : 1100);
+      if (k >= 1) { flares.splice(i, 1); continue; }
+      const [x, y] = pos(f.star);
+      ctx.globalAlpha = (1 - k) * .9;
+      ctx.strokeStyle = `rgb(${f.color})`; ctx.lineWidth = f.big ? 1.5 : 1;
+      ctx.beginPath(); ctx.arc(x, y, f.star.size + 3 + ease(k) * (f.big ? 34 : 18), 0, 6.283); ctx.stroke();
     }
     // Asterisms: lines draw in after the stars, then the label.
     const lp = reduced ? 1 : ease((t - born - 700) / 1600);
@@ -328,7 +367,7 @@ const Sky = (() => {
   section.addEventListener('pointermove', hover);
   section.addEventListener('pointerleave', () => { tip.hidden = true; mouse.x = mouse.y = -1; });
   requestAnimationFrame(loop);
-  return { setData };
+  return { setData, flare };
 })();
 
 // ---------- story: noise → asterism ----------
@@ -482,6 +521,252 @@ const Sky = (() => {
   $$('.line > span', h1).forEach((el, i) => (el.style.transitionDelay = 80 + i * 110 + 'ms'));
   requestAnimationFrame(() => h1.classList.add('in'));
 })();
+
+// ---------- live tape: replay the delayed feed at its real pace ----------
+const Tape = (() => {
+  const list = $('.tape-rows');
+  const toggle = $('[data-tape-filter]');
+  const ROWS = 12;
+  let queue = [];
+  let lag = null;          // seconds between wall clock and the replayed moment
+  let lastTs = 0;
+  let hideNoise = false;
+  const emitted = [];      // timestamps (wall clock, s) for trades/min
+  const seen = new Set();
+
+  toggle.addEventListener('click', () => {
+    hideNoise = !hideNoise;
+    toggle.setAttribute('aria-pressed', String(hideNoise));
+    toggle.textContent = hideNoise ? 'Show noise' : 'Hide noise';
+    $$('li', list).forEach((li) => (li.hidden = hideNoise && li.classList.contains('noise')));
+  });
+
+  async function poll() {
+    try {
+      const data = await get('/api/public/feed?since=' + lastTs);
+      const fresh = data.trades.filter((tr) => !seen.has(tr.tx + tr.w + tr.t + tr.side));
+      fresh.forEach((tr) => seen.add(tr.tx + tr.w + tr.t + tr.side));
+      if (seen.size > 5000) seen.clear();
+      if (!fresh.length) return;
+      lastTs = Math.max(lastTs, fresh.at(-1).ts);
+      if (lag === null) {
+        // Start 40 s behind the newest trade so there is a backlog to play.
+        lag = Date.now() / 1000 - (lastTs - 40);
+        const older = fresh.filter((tr) => tr.ts <= lastTs - 40).slice(-ROWS);
+        older.forEach((tr) => row(tr, false));
+        queue.push(...fresh.filter((tr) => tr.ts > lastTs - 40));
+      } else {
+        queue.push(...fresh);
+      }
+      // Never fall more than 90 s behind the newest published trade.
+      const vt = Date.now() / 1000 - lag;
+      if (lastTs - vt > 90) lag -= lastTs - vt - 60;
+    } catch { /* keep the last tape */ }
+  }
+
+  function row(tr, animate = true) {
+    const li = document.createElement('li');
+    if (tr.noise) li.className = 'noise';
+    if (!animate) li.style.animation = 'none';
+    const tier = tr.noise ? 'X' : tr.tier || '·';
+    const who = tr.x ? '@' + esc(tr.x) : short(tr.w);
+    const flag = tr.full ? `<span class="flag">${tr.side === 'buy' ? 'OPEN' : 'EXIT'}</span>` : '';
+    const time = new Date(tr.ts * 1000).toISOString().slice(11, 19);
+    const img = tr.logo ? `<img src="${esc(tr.logo)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">` : '<img alt="">';
+    li.innerHTML = `<span class="tm">${time}</span><span class="pill ${tier}" title="${tr.noise ? esc(reason(tr.noise)) : 'rank ' + tier}">${tier === 'X' ? '×' : tier}</span>`
+      + `<span class="who">${who}</span><span class="side-${tr.side}">${tr.side === 'buy' ? 'BUY' : 'SELL'}</span>`
+      + `<span class="sym">${img}$${esc(tr.s || short(tr.t))}${flag}</span><span class="usd">${usd(tr.usd)}</span>`;
+    li.hidden = hideNoise && Boolean(tr.noise);
+    list.prepend(li);
+    while (list.children.length > ROWS * 2) list.lastChild.remove();
+  }
+
+  function tick() {
+    if (lag === null) return;
+    const vt = Date.now() / 1000 - lag;
+    let n = 0;
+    while (queue.length && queue[0].ts <= vt) {
+      const tr = queue.shift();
+      // Flood guard: flare every trade, but only render the last few of a burst.
+      if (queue.length < 6 || n < 4) row(tr);
+      Sky.flare(tr);
+      emitted.push(Date.now() / 1000);
+      n++;
+    }
+    const cut = Date.now() / 1000 - 60;
+    while (emitted.length && emitted[0] < cut) emitted.shift();
+  }
+
+  function tpm() {
+    return emitted.length;
+  }
+
+  poll();
+  setInterval(poll, 6000);
+  setInterval(tick, reduced ? 1000 : 120);
+  setInterval(() => { if (lag !== null) setNum('tpm', tpm()); }, 2000);
+  return {};
+})();
+
+// ---------- pulse: trades per 15 min, kept vs dimmed ----------
+const Pulse = (() => {
+  const canvas = $('.chart-canvas');
+  const ctx = canvas.getContext('2d');
+  const tip = $('.chart-tip');
+  const wrap = $('.chart');
+  let data = null, w = 0, h = 0, shown = 0, hover = -1, started = false;
+
+  function resize() {
+    const r = canvas.getBoundingClientRect();
+    w = r.width; h = r.height;
+    canvas.width = Math.round(w * DPR()); canvas.height = Math.round(h * DPR());
+    ctx.setTransform(DPR(), 0, 0, DPR(), 0, 0);
+    draw();
+  }
+
+  function set(d) {
+    data = d;
+    $('[data-p="trades"]').textContent = nf.format(d.totals.trades);
+    $('[data-p="wallets"]').textContent = nf.format(d.totals.wallets);
+    $('[data-p="tokens"]').textContent = nf.format(d.totals.tokens);
+    $('[data-p="usd"]').textContent = usd(d.buckets.reduce((sum, b) => sum + b.usd, 0));
+    const first = d.buckets.find((b) => b.real + b.noise > 0);
+    $('[data-chart-note]').textContent = first && first.t > d.buckets[0].t + 900
+      ? 'collecting since ' + new Date(first.t * 1000).toISOString().slice(11, 16) + ' UTC'
+      : 'last 24 hours · UTC';
+    draw();
+  }
+
+  function draw() {
+    if (!data || !w) return;
+    ctx.clearRect(0, 0, w, h);
+    const bs = data.buckets;
+    const max = Math.max(10, ...bs.map((b) => b.real + b.noise));
+    const padB = 22, padT = 8;
+    const bw = w / bs.length;
+    const k = reduced ? 1 : ease(shown);
+    // grid
+    ctx.globalAlpha = 1; ctx.strokeStyle = 'rgba(238,241,248,.06)'; ctx.lineWidth = 1;
+    for (let g = 1; g <= 3; g++) {
+      const y = Math.round(padT + (h - padB - padT) * (1 - g / 3)) + .5;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+      ctx.fillStyle = 'rgba(238,241,248,.3)'; ctx.font = '500 10px "JetBrains Mono", monospace';
+      ctx.fillText(nf.format(Math.round((max * g) / 3)), 4, y - 4);
+    }
+    bs.forEach((b, i) => {
+      const x = i * bw + 1;
+      const bwi = Math.max(1, bw - 2);
+      const hr = ((h - padB - padT) * b.real / max) * k;
+      const hn = ((h - padB - padT) * b.noise / max) * k;
+      const base = h - padB;
+      ctx.globalAlpha = hover === -1 || hover === i ? 1 : .45;
+      ctx.fillStyle = 'rgba(240,138,122,.5)';
+      ctx.fillRect(x, base - hr - hn, bwi, hn);
+      ctx.fillStyle = '#eef1f8';
+      ctx.fillRect(x, base - hr, bwi, hr);
+      if (i % 16 === 0) {
+        ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(238,241,248,.38)'; ctx.font = '500 10px "JetBrains Mono", monospace';
+        ctx.fillText(new Date(b.t * 1000).toISOString().slice(11, 16), x, h - 6);
+      }
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  function animate(t0) {
+    const step = (t) => {
+      shown = clamp((t - t0) / 1200);
+      draw();
+      if (shown < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  canvas.addEventListener('pointermove', (e) => {
+    if (!data) return;
+    const r = canvas.getBoundingClientRect();
+    const i = Math.floor(((e.clientX - r.left) / r.width) * data.buckets.length);
+    const b = data.buckets[i];
+    if (!b) return;
+    hover = i; draw();
+    const wr = wrap.getBoundingClientRect();
+    tip.hidden = false;
+    tip.style.left = e.clientX - wr.left + 'px';
+    tip.style.top = e.clientY - wr.top + 'px';
+    const total = b.real + b.noise;
+    tip.innerHTML = `${new Date(b.t * 1000).toISOString().slice(11, 16)} UTC<br><b>${nf.format(b.real)}</b> kept · ${nf.format(b.noise)} dimmed${total ? ` (${Math.round((b.noise / total) * 100)}%)` : ''}<br>kept volume ${usd(b.usd)}`;
+  });
+  canvas.addEventListener('pointerleave', () => { hover = -1; tip.hidden = true; draw(); });
+  new ResizeObserver(resize).observe(canvas);
+  new IntersectionObserver(([e]) => {
+    if (e.isIntersecting && !started) { started = true; animate(performance.now()); }
+  }, { threshold: .3 }).observe(canvas);
+
+  async function load() {
+    try { set(await get('/api/public/pulse')); } catch { /* keep */ }
+  }
+  load();
+  setInterval(load, 60_000);
+  return {};
+})();
+
+// ---------- polish: loader, smooth scroll, active nav, spotlight ----------
+(() => {
+  // Short branded loader; added by JS so the page never depends on it.
+  if (!reduced && !sessionStorageSafe('seen')) {
+    const loader = document.createElement('div');
+    loader.className = 'loader';
+    loader.innerHTML = '<div class="loader-in"><svg viewBox="0 0 24 24"><path d="M12 1.5c.5 5.6 4.9 10 10.5 10.5-5.6.5-10 4.9-10.5 10.5C11.5 16.9 7.1 12.5 1.5 12 7.1 11.5 11.5 7.1 12 1.5Z"/></svg><b>000</b></div>';
+    document.body.append(loader);
+    const counter = $('b', loader);
+    const t0 = performance.now();
+    const done = () => { loader.classList.add('out'); setTimeout(() => loader.remove(), 900); };
+    const step = (t) => {
+      const k = clamp((t - t0) / 1000);
+      counter.textContent = String(Math.round(ease(k) * 100)).padStart(3, '0');
+      if (k < 1) requestAnimationFrame(step); else done();
+    };
+    requestAnimationFrame(step);
+    setTimeout(done, 1600); // hard stop
+  }
+
+  if (!reduced && window.Lenis) {
+    const lenis = new window.Lenis({ lerp: .1, smoothWheel: true });
+    const raf = (t) => { lenis.raf(t); requestAnimationFrame(raf); };
+    requestAnimationFrame(raf);
+    document.addEventListener('click', (e) => {
+      const a = e.target.closest('a[href^="#"]');
+      if (!a) return;
+      const target = $(a.getAttribute('href'));
+      if (!target) return;
+      e.preventDefault();
+      lenis.scrollTo(target, { offset: -70 });
+    });
+  }
+
+  const links = $$('.nav a');
+  const io = new IntersectionObserver((entries) => entries.forEach((e) => {
+    if (!e.isIntersecting) return;
+    links.forEach((a) => a.classList.toggle('active', a.getAttribute('href') === '#' + e.target.id));
+  }), { rootMargin: '-45% 0px -50% 0px' });
+  ['method', 'pulse', 'signals', 'wallets'].forEach((id) => io.observe(document.getElementById(id)));
+  io.observe($('#sky'));
+
+  document.addEventListener('pointermove', (e) => {
+    const el = e.target.closest?.('.glow');
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    el.style.setProperty('--mx', e.clientX - r.left + 'px');
+    el.style.setProperty('--my', e.clientY - r.top + 'px');
+  }, { passive: true });
+})();
+
+function sessionStorageSafe(key) {
+  try {
+    const had = sessionStorage.getItem('asterism:' + key);
+    sessionStorage.setItem('asterism:' + key, '1');
+    return had;
+  } catch { return null; }
+}
 
 load().catch((e) => console.error(e));
 setInterval(() => load().catch(() => {}), 60_000);

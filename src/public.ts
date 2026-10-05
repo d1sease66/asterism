@@ -159,3 +159,73 @@ export function wallets(db: DB) {
     })),
   };
 }
+
+/**
+ * Delayed trade tape: real (non-route) trades in (since, cutoff], oldest
+ * first, so the page can replay them at their original pace.
+ */
+export function feed(db: DB, since: number, now = Math.floor(Date.now() / 1000)) {
+  const cutoff = publicCutoff(now);
+  const from = Math.max(since, cutoff - 180);
+  const rows = db.prepare(`
+    SELECT t.tx_hash, t.wallet, t.token, t.side, t.amount_usd, t.is_open_or_close, t.ts,
+      w.tier, w.is_kol, w.twitter_username, w.tags_json, w.excluded_reason, k.symbol, k.logo
+    FROM trades t JOIN wallets w ON w.address = t.wallet LEFT JOIN tokens k ON k.address = t.token
+    WHERE t.route = 0 AND t.ts > ? AND t.ts <= ?
+    ORDER BY t.ts, t.rowid LIMIT 400`).all(from, cutoff) as Array<{
+      tx_hash: string; wallet: string; token: string; side: string; amount_usd: number; is_open_or_close: number; ts: number;
+      tier: string | null; is_kol: number; twitter_username: string | null; tags_json: string; excluded_reason: string | null;
+      symbol: string | null; logo: string | null;
+    }>;
+  return {
+    cutoff,
+    delay_min: PUBLIC_DELAY_MIN,
+    trades: rows.map((row) => ({
+      tx: row.tx_hash.slice(0, 16),
+      w: row.wallet,
+      t: row.token,
+      s: row.symbol,
+      logo: row.logo,
+      side: row.side,
+      usd: Math.round(row.amount_usd),
+      full: row.is_open_or_close === 1,
+      ts: row.ts,
+      tier: row.tier,
+      kol: row.is_kol === 1,
+      x: row.twitter_username,
+      noise: row.excluded_reason ?? exclusionByTags(JSON.parse(row.tags_json) as string[]) ?? null,
+    })),
+  };
+}
+
+/** Activity over the last 24 h in 15-minute buckets: signal-grade vs noise trades. */
+export function pulse(db: DB, now = Math.floor(Date.now() / 1000)) {
+  const cutoff = publicCutoff(now);
+  const bucket = 900;
+  const start = Math.floor((cutoff - 86400) / bucket) * bucket;
+  const rows = db.prepare(`
+    SELECT (t.ts / ${bucket}) * ${bucket} AS b, w.tags_json, w.excluded_reason, COUNT(*) AS n, SUM(t.amount_usd) AS usd
+    FROM trades t JOIN wallets w ON w.address = t.wallet
+    WHERE t.route = 0 AND t.ts > ? AND t.ts <= ?
+    GROUP BY b, w.address`).all(start, cutoff) as Array<{ b: number; tags_json: string; excluded_reason: string | null; n: number; usd: number }>;
+  const buckets = new Map<number, { t: number; real: number; noise: number; usd: number }>();
+  for (let t = start; t <= cutoff; t += bucket) buckets.set(t, { t, real: 0, noise: 0, usd: 0 });
+  for (const row of rows) {
+    const slot = buckets.get(row.b);
+    if (!slot) continue;
+    if (row.excluded_reason ?? exclusionByTags(JSON.parse(row.tags_json) as string[])) slot.noise += row.n;
+    else {
+      slot.real += row.n;
+      slot.usd += row.usd;
+    }
+  }
+  const totals = db.prepare(`
+    SELECT COUNT(*) AS trades, COUNT(DISTINCT t.wallet) AS wallets, COUNT(DISTINCT t.token) AS tokens, SUM(t.amount_usd) AS usd
+    FROM trades t WHERE t.route = 0 AND t.ts > ? AND t.ts <= ?`).get(cutoff - 86400, cutoff) as { trades: number; wallets: number; tokens: number; usd: number | null };
+  return {
+    cutoff,
+    bucket_sec: bucket,
+    buckets: [...buckets.values()].map((slot) => ({ ...slot, usd: Math.round(slot.usd) })),
+    totals: { ...totals, usd: Math.round(totals.usd ?? 0) },
+  };
+}
