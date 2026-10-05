@@ -1,0 +1,24 @@
+{
+  "name": "smart-wallet-alerts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Solana smart-wallet scoring and cluster alerts (GMGN) + Asterism dashboard",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "test": "tsc && node --test tests/*.test.mjs",
+    "stats": "node scripts/collector-stats.mjs"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^22.20.5",
+    "typescript": "^7.0.2"
+  }
+}
