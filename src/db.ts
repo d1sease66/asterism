@@ -174,6 +174,25 @@ const MIGRATIONS: string[] = [
   ALTER TABLE discovery_hits ADD COLUMN tags_json TEXT;
   ALTER TABLE discovery_hits ADD COLUMN twitter TEXT;
   `,
+  `
+  -- Telegram subscribers, muted tokens and per-chat message ids of signals.
+  CREATE TABLE telegram_chats (
+    id TEXT PRIMARY KEY,
+    type TEXT,
+    title TEXT,
+    thread_id INTEGER,
+    added_at INTEGER NOT NULL
+  );
+  CREATE TABLE muted_tokens (
+    token TEXT PRIMARY KEY,
+    until INTEGER NOT NULL
+  );
+  ALTER TABLE signals ADD COLUMN messages_json TEXT;
+  ALTER TABLE signals ADD COLUMN text TEXT;
+  ALTER TABLE signal_outcomes ADD COLUMN checked_at INTEGER;
+  ALTER TABLE wallet_metrics ADD COLUMN early_n INTEGER;
+  ALTER TABLE wallet_metrics ADD COLUMN components_json TEXT;
+  `,
 ];
 
 export function openDb(dataDir: string, file = 'swa.sqlite'): DB {

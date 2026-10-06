@@ -85,6 +85,11 @@ function renderHud() {
     setNum('stars', sky.stars.length);
     $('[data-k="noise"]').textContent = sky.stars.length ? Math.round((noise / sky.stars.length) * 100) + '%' : '—';
   }
+  if (sum?.bot) {
+    $$('[data-bot]').forEach((a) => { a.href = `https://t.me/${sum.bot}`; a.target = '_blank'; a.rel = 'noopener'; });
+    const note = $('[data-bot-note]');
+    if (note) note.textContent = '@' + sum.bot;
+  }
   if (sum?.watching_since) $('[data-since]').textContent = 'Watching since ' + hhmm(sum.watching_since) + ' · ' + nf.format(sum.wallets) + ' wallets tracked';
 }
 function setNum(key, value) {
@@ -562,6 +567,7 @@ const Drawer = (() => {
   const TXSRC = { gmgn_sm: 'feed', gmgn_kol: 'kol', gmgn_activity: 'history' };
 
   function close() {
+    if (location.hash.startsWith('#w=')) history.replaceState(null, '', location.pathname + location.search);
     root.hidden = true;
     current = null;
     window.__lenis?.start();
@@ -887,3 +893,11 @@ function sessionStorageSafe(key) {
 
 load().catch((e) => console.error(e));
 setInterval(() => load().catch(() => {}), 60_000);
+
+// Deep link from Telegram alerts: /#w=<address> opens that wallet.
+function openFromHash() {
+  const match = location.hash.match(/^#w=([1-9A-HJ-NP-Za-km-z]{32,44})$/);
+  if (match) Drawer.open(match[1]);
+}
+addEventListener('hashchange', openFromHash);
+openFromHash();

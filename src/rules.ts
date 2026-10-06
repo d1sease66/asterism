@@ -9,8 +9,14 @@ export const STRONG_TAGS = ['smart_degen', 'kol', 'renowned', 'launchpad_smart']
 export const MAX_TRADES_PER_DAY = 300;
 export const MIN_MEDIAN_HOLD_SEC = 60;
 
-export function exclusionByTags(tags: readonly string[]): string | undefined {
-  const hit = EXCLUDE_TAGS.find((tag) => tags.includes(tag));
+/**
+ * GMGN puts `arbitrager` on almost every KOL wallet (94 of 100 KOL feed
+ * trades on 2026-10-06), so for KOLs that tag alone does not exclude;
+ * behaviour rules still apply to them.
+ */
+export function exclusionByTags(tags: readonly string[], options: { isKol?: boolean } = {}): string | undefined {
+  const isKol = options.isKol ?? (tags.includes('kol') || tags.includes('renowned'));
+  const hit = EXCLUDE_TAGS.find((tag) => tags.includes(tag) && !(isKol && tag === 'arbitrager'));
   if (hit) return `tag:${hit}`;
   const weak = WEAK_EXCLUDE_TAGS.find((tag) => tags.includes(tag));
   if (weak && !STRONG_TAGS.some((tag) => tags.includes(tag))) return `tag:${weak}`;
