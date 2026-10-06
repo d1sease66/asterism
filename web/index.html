@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Asterism — smart money, when it agrees</title>
   <meta name="description" content="A live sky of Solana smart-money wallets. Bots dimmed. A signal only when strong wallets buy the same token.">
-  <meta name="theme-color" content="#060912">
+  <meta name="theme-color" content="#08090A">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=Instrument+Serif:ital@1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=19">
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css?v=21">
   <script>document.documentElement.classList.add('js')</script>
 </head>
 <body>
@@ -37,16 +37,21 @@
       <canvas class="sky-canvas" aria-hidden="true"></canvas>
       <div class="sky-tip" role="tooltip" hidden></div>
       <div class="sky-copy">
-        <p class="kicker"><span class="pulse"></span><span>Solana · smart money · <b data-delay>15</b>&nbsp;min delay</span></p>
+        <p class="eyebrow"><span class="pulse"></span><span>Solana smart money · <b data-delay>15</b>&nbsp;min delay</span></p>
         <h1 class="h1"><span class="line"><span>Smart money,</span></span><span class="line"><span><em>when it agrees.</em></span></span></h1>
-        <p class="lede" data-reveal>Every star is a real wallet. Bots are dimmed. A line lights up when strong wallets buy the same token.</p>
+        <p class="lede" data-reveal>Every star is a real wallet. A line lights up when the strong ones buy together.</p>
         <div class="cta-row" data-reveal>
-          <a class="btn" data-bot href="#final">Telegram bot<span class="arrow">→</span></a>
-          <a class="btn btn-ghost" href="#method">How it works<span class="arrow down">↓</span></a>
+          <a class="btn btn-xl" data-bot href="#final">Open the bot<span class="arrow">→</span></a>
         </div>
+        <button class="handle-pill" type="button" data-reveal data-copy="@solasterismbot" title="Copy"><span>Telegram</span><b data-bot-handle>@solasterismbot</b><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="8" height="8" rx="2"/><path d="M3 10V4a1 1 0 0 1 1-1h6"/></svg></button>
+        <a class="scroll-cue" href="#live" aria-label="Scroll to the live tape">↓</a>
       </div>
-      <div class="side" data-reveal>
-        <div class="tape glow" aria-label="Live trade tape">
+    </section>
+
+    <!-- Live tape -->
+    <section class="live-band" id="live" aria-label="Live trade tape">
+      <div class="live-grid">
+        <div class="tape glow" data-reveal>
           <div class="tape-head">
             <span class="live"><i></i>Live tape</span>
             <span class="tape-delay"><b data-delay>15</b> min delay</span>
@@ -54,13 +59,17 @@
           </div>
           <ol class="tape-rows" aria-live="off"></ol>
         </div>
-        <dl class="hud glow">
-          <div><dt>Wallets · 24h</dt><dd data-k="stars">—</dd></div>
-          <div><dt>Noise</dt><dd data-k="noise">—</dd></div>
-          <div><dt>Trades / min</dt><dd data-k="tpm">—</dd></div>
-        </dl>
-        <div class="legend" aria-hidden="true">
-          <span><i class="dot a"></i>A</span><span><i class="dot b"></i>B</span><span><i class="dot c"></i>C · unranked</span><span><i class="dot x"></i>noise</span><span><i class="ring"></i>KOL</span>
+        <div class="live-side" data-reveal>
+          <h2 class="h3">Every row is an <em>on&#8209;chain trade.</em></h2>
+          <p class="sub">Click a wallet for its full history. Click an amount to open the transaction on Solscan.</p>
+          <dl class="hud glow">
+            <div><dt>Wallets · 24h</dt><dd data-k="stars">—</dd></div>
+            <div><dt>Noise</dt><dd data-k="noise">—</dd></div>
+            <div><dt>Trades / min</dt><dd data-k="tpm">—</dd></div>
+          </dl>
+          <div class="legend" aria-hidden="true">
+            <span><i class="dot a"></i>A</span><span><i class="dot b"></i>B</span><span><i class="dot c"></i>C · unranked</span><span><i class="dot x"></i>noise</span><span><i class="ring"></i>KOL</span>
+          </div>
         </div>
       </div>
     </section>
@@ -199,6 +208,6 @@
   </aside>
 
   <script src="https://cdn.jsdelivr.net/npm/lenis@1.1.20/dist/lenis.min.js" defer></script>
-  <script src="/app.js?v=19" defer></script>
+  <script src="/app.js?v=21" defer></script>
 </body>
 </html>

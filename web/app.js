@@ -89,6 +89,8 @@ function renderHud() {
     $$('[data-bot]').forEach((a) => { a.href = `https://t.me/${sum.bot}`; a.target = '_blank'; a.rel = 'noopener'; });
     const note = $('[data-bot-note]');
     if (note) note.textContent = '@' + sum.bot;
+    const handle = $('[data-bot-handle]');
+    if (handle) { handle.textContent = '@' + sum.bot; handle.closest('[data-copy]').dataset.copy = '@' + sum.bot; }
   }
   if (sum?.watching_since) $('[data-since]').textContent = 'Watching since ' + hhmm(sum.watching_since) + ' · ' + nf.format(sum.wallets) + ' wallets tracked';
 }
@@ -212,7 +214,7 @@ const Sky = (() => {
   glow.width = glow.height = 64;
   const g = glow.getContext('2d');
   const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-  grad.addColorStop(0, 'rgba(238,241,248,.9)'); grad.addColorStop(.18, 'rgba(238,241,248,.35)'); grad.addColorStop(1, 'rgba(238,241,248,0)');
+  grad.addColorStop(0, 'rgba(242,244,243,.9)'); grad.addColorStop(.18, 'rgba(242,244,243,.35)'); grad.addColorStop(1, 'rgba(242,244,243,0)');
   g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
 
   function resize() {
@@ -230,8 +232,8 @@ const Sky = (() => {
     // Fixed slots keep asterisms apart and clear of the headline and HUD.
     const slots = mobile
       ? [[.3, .2], [.7, .85]]
-      : [[.44, .22], [.8, .13], [.63, .34], [.27, .12], [.5, .45], [.92, .3]];
-    // On phones the asterisms live in the free band between header and copy.
+      : [[.13, .22], [.87, .2], [.12, .7], [.88, .68], [.3, .1], [.7, .1]];
+    // Desktop: around the centred copy. Phones: in the band between header and copy.
     const copyTop = mobile ? $('.sky-copy').offsetTop : 0;
     groups = state.sky.asterisms.slice(0, slots.length).map((a, i) => {
       const [sx, sy] = slots[i];
@@ -291,7 +293,7 @@ const Sky = (() => {
     star.n += 1;
     star.vol += trade.usd;
     star.last = trade.ts;
-    flares.push({ star, t0: now, color: trade.noise ? '240,138,122' : trade.side === 'buy' ? '244,184,96' : '238,241,248', big: trade.usd >= 1000 });
+    flares.push({ star, t0: now, color: trade.noise ? '240,138,122' : trade.side === 'buy' ? '244,184,96' : '242,244,243', big: trade.usd >= 1000 });
     if (flares.length > 80) flares.shift();
   }
 
@@ -317,10 +319,10 @@ const Sky = (() => {
         ctx.drawImage(glow, x - gs / 2, y - gs / 2, gs, gs);
       }
       ctx.globalAlpha = a;
-      ctx.fillStyle = s.gr ? '#ffe6bf' : '#eef1f8';
+      ctx.fillStyle = s.gr ? '#ffe6bf' : '#f2f4f3';
       ctx.beginPath(); ctx.arc(x, y, s.size * (1 + heat * .8), 0, 6.283); ctx.fill();
-      if (s.kol && s.tier !== 'x') {
-        ctx.globalAlpha = a * .8; ctx.strokeStyle = '#f4b860'; ctx.lineWidth = 1;
+      if (s.kol && s.tier !== 'x' && (s.tier === 'A' || s.tier === 'B' || s.gr)) {
+        ctx.globalAlpha = a * .45; ctx.strokeStyle = '#f4b860'; ctx.lineWidth = .8;
         ctx.beginPath(); ctx.arc(x, y, s.size + 3, 0, 6.283); ctx.stroke();
       }
     }
@@ -464,10 +466,10 @@ const Sky = (() => {
       const jx = reduced ? 0 : Math.sin(t * .0012 * d.sp + d.ph) * 6 * (1 - k2);
       const jy = reduced ? 0 : Math.cos(t * .0010 * d.sp + d.ph) * 6 * (1 - k2);
       let x = pad + d.sx * (w - pad * 2) + jx, y = pad + d.sy * (h - pad * 2) + jy;
-      let a = .55, r = 1.6, color = '238,241,248';
+      let a = .55, r = 1.6, color = '242,244,243';
       if (d.kind === 'bot') {
         const red = clamp(k1 * 2);
-        color = red > .5 ? '240,138,122' : '238,241,248';
+        color = red > .5 ? '240,138,122' : '242,244,243';
         a = .55 * (1 - clamp((k1 - .35) / .65));
         y += clamp((k1 - .35) / .65) * 70 * d.fall;
         if (a <= 0.01) continue;
@@ -486,7 +488,7 @@ const Sky = (() => {
       ctx.globalAlpha = a; ctx.fillStyle = `rgb(${color})`;
       ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
       if (d.kind === 'A' && k2 > .6 && k3 < .5) {
-        ctx.globalAlpha = (k2 - .6) / .4 * (1 - k3 * 2); ctx.fillStyle = '#eef1f8'; ctx.font = '500 10px "JetBrains Mono", monospace';
+        ctx.globalAlpha = (k2 - .6) / .4 * (1 - k3 * 2); ctx.fillStyle = '#f2f4f3'; ctx.font = '500 10px "JetBrains Mono", monospace';
         ctx.fillText('A', x + 7, y - 7);
       }
     }
@@ -635,8 +637,8 @@ if (SNAPSHOT) {
   if (live) live.innerHTML = '<i class="off"></i>Snapshot';
   const delay = $('.tape-delay');
   if (delay) delay.textContent = at;
-  const kicker = $('.sky-copy .kicker span:last-child');
-  if (kicker) kicker.innerHTML = `Solana · smart money · snapshot ${at}`;
+  const kicker = $('.eyebrow span:last-child');
+  if (kicker) kicker.innerHTML = `Solana smart money · snapshot ${at}`;
 }
 
 // ---------- live tape: replay the delayed feed at its real pace ----------
@@ -768,11 +770,11 @@ const Pulse = (() => {
     const bw = w / bs.length;
     const k = reduced ? 1 : ease(shown);
     // grid
-    ctx.globalAlpha = 1; ctx.strokeStyle = 'rgba(238,241,248,.06)'; ctx.lineWidth = 1;
+    ctx.globalAlpha = 1; ctx.strokeStyle = 'rgba(242,244,243,.06)'; ctx.lineWidth = 1;
     for (let g = 1; g <= 3; g++) {
       const y = Math.round(padT + (h - padB - padT) * (1 - g / 3)) + .5;
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
-      ctx.fillStyle = 'rgba(238,241,248,.3)'; ctx.font = '500 10px "JetBrains Mono", monospace';
+      ctx.fillStyle = 'rgba(242,244,243,.3)'; ctx.font = '500 10px "JetBrains Mono", monospace';
       ctx.fillText(nf.format(Math.round((max * g) / 3)), 4, y - 4);
     }
     bs.forEach((b, i) => {
@@ -784,10 +786,10 @@ const Pulse = (() => {
       ctx.globalAlpha = hover === -1 || hover === i ? 1 : .45;
       ctx.fillStyle = 'rgba(240,138,122,.5)';
       ctx.fillRect(x, base - hr - hn, bwi, hn);
-      ctx.fillStyle = '#eef1f8';
+      ctx.fillStyle = '#f2f4f3';
       ctx.fillRect(x, base - hr, bwi, hr);
       if (i % 16 === 0) {
-        ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(238,241,248,.38)'; ctx.font = '500 10px "JetBrains Mono", monospace';
+        ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(242,244,243,.38)'; ctx.font = '500 10px "JetBrains Mono", monospace';
         ctx.fillText(new Date(b.t * 1000).toISOString().slice(11, 16), x, h - 6);
       }
     });
@@ -880,7 +882,7 @@ const Pulse = (() => {
       const [x, y] = pos(s);
       if (y > h) continue;
       ctx.globalAlpha = s.a * (reduced ? 1 : .7 + .3 * Math.sin(t * .001 * s.sp + s.tw));
-      ctx.fillStyle = '#eef1f8';
+      ctx.fillStyle = '#f2f4f3';
       ctx.beginPath(); ctx.arc(x, y, s.r, 0, 6.283); ctx.fill();
     }
     if (!reduced) {
