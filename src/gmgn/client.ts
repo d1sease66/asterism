@@ -57,6 +57,7 @@ const ROUTE_SPACING_MS: Record<string, number> = {
   '/v1/user/wallet_profits': 20_000,
   '/v1/market/token_top_traders': 10_000,
   '/v1/market/token_kline': 5_000,
+  '/v1/market/rank': 15_000,
 };
 const MAX_ROUTE_SPACING_MS = 5 * 60_000;
 

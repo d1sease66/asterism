@@ -92,7 +92,12 @@ export class Discovery {
       try {
         lists.push(...await this.client.trending(interval, { orderBy, limit: 100 }));
       } catch (error) {
-        if (error instanceof GmgnError && error.isRateLimit) throw error;
+        // Work with the lists we already have rather than failing the pass.
+        if (error instanceof GmgnError && error.isRateLimit) {
+          if (!lists.length) throw error;
+          log.warn(`trending stopped after ${lists.length} items: rate limited`);
+          break;
+        }
         log.warn(`trending ${interval}/${orderBy} failed`, error);
       }
     }
@@ -105,6 +110,7 @@ export class Discovery {
     this.running = true;
     try {
       const now = Math.floor(Date.now() / 1000);
+      let promoted = this.promote(); // hits left by an interrupted pass, before any API call
       const winners = await this.winners();
       const fresh = this.db.prepare('SELECT processed_at FROM discovery_tokens WHERE address = ?');
       const due = winners.filter((winner) => {
@@ -113,7 +119,6 @@ export class Discovery {
       }).slice(0, this.options.tokensPerRun);
       log.info(`${winners.length} winners, scanning ${due.length}`);
       let hits = 0;
-      let promoted = this.promote(); // hits left by an interrupted pass
       for (const winner of due) {
         try {
           hits += await this.scan(winner);
