@@ -8,7 +8,11 @@ set -euo pipefail
 SERVER="root@188.253.26.129"
 KEY="$HOME/.ssh/searadar_deploy"
 REMOTE_DIR="/opt/smart-wallet-alerts"
-SSH="ssh -o BatchMode=yes -o IdentitiesOnly=yes -i $KEY $SERVER"
+# One multiplexed connection for the whole deploy: the server rate-limits
+# new SSH connections and resets bursts of them.
+CTL="/tmp/swa-deploy-%r@%h:%p"
+SSH_OPTS="-o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 -o ControlMaster=auto -o ControlPath=$CTL -o ControlPersist=120 -i $KEY"
+SSH="ssh $SSH_OPTS $SERVER"
 SEED=0
 [ "${1:-}" = "--seed" ] && SEED=1
 
@@ -55,7 +59,7 @@ if [ "$SEED" = 1 ]; then
     echo "→ Seed skipped: the server already has a database"
   else
     echo "→ Seeding the server database"
-    scp -o BatchMode=yes -o IdentitiesOnly=yes -i "$KEY" /tmp/swa-seed.sqlite "$SERVER:$REMOTE_DIR/data/swa.sqlite"
+    scp $SSH_OPTS /tmp/swa-seed.sqlite "$SERVER:$REMOTE_DIR/data/swa.sqlite"
   fi
   rm -f /tmp/swa-seed.sqlite
 fi
@@ -72,4 +76,5 @@ $SSH "
   journalctl -u smart-wallet-alerts -n 6 --no-pager -o cat
   curl -s -m 5 http://127.0.0.1:5190/health; echo
 "
+ssh -O exit -o ControlPath=$CTL $SERVER 2>/dev/null || true
 echo "✓ Deployed"
