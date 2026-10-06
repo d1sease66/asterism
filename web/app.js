@@ -831,6 +831,109 @@ const Pulse = (() => {
   return {};
 })();
 
+// ---------- page-wide field: drifting stars, meteors, passing constellations ----------
+(() => {
+  const canvas = $('.field');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const hero = $('#sky');
+  const dpr = Math.min(1.5, window.devicePixelRatio || 1);
+  let w = 0, h = 0, stars = [], meteors = [], figures = [], on = false, last = 0, nextMeteor = 0, nextFigure = 0;
+
+  function resize() {
+    w = innerWidth; h = innerHeight;
+    canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const count = Math.round(Math.min(220, (w * h) / 7000));
+    let seed = 11;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    stars = Array.from({ length: count }, () => {
+      const depth = rnd();                       // 0 far … 1 near
+      return { x: rnd() * w, y: rnd() * h * 3, depth, r: .4 + depth * 1.3, a: .18 + depth * .5, tw: rnd() * 6.28, sp: .4 + rnd() * 1.4, vx: (rnd() - .5) * .006 * (1 + depth) };
+    });
+  }
+
+  function spawnMeteor(t) {
+    const fromLeft = Math.random() < .5;
+    meteors.push({ t0: t, x: fromLeft ? Math.random() * w * .5 : w * (.5 + Math.random() * .5), y: Math.random() * h * .5, dx: fromLeft ? 1 : -1, len: 90 + Math.random() * 120, dur: 900 + Math.random() * 600 });
+  }
+
+  // A faint ember figure joins 3–5 near stars, holds, then dissolves: the
+  // sky keeps forming asterisms as you read.
+  function spawnFigure(t, sy) {
+    const visible = stars.filter((s) => s.depth > .45).map((s) => ({ s, y: ((s.y - sy * s.depth * .25) % (h * 3) + h * 3) % (h * 3) })).filter((p) => p.y < h);
+    if (visible.length < 6) return;
+    const seedStar = visible[Math.floor(Math.random() * visible.length)];
+    const near = visible.map((p) => ({ p, d: Math.hypot(p.s.x - seedStar.s.x, p.y - seedStar.y) })).filter((q) => q.d < 260).sort((a, b) => a.d - b.d).slice(0, 3 + Math.floor(Math.random() * 3));
+    if (near.length < 3) return;
+    figures.push({ t0: t, stars: near.map((q) => q.p.s), dur: 5200 });
+  }
+
+  function frame(t) {
+    requestAnimationFrame(frame);
+    if (!on || document.hidden || t - last < 33) return;
+    last = t;
+    const sy = scrollY;
+    ctx.clearRect(0, 0, w, h);
+    const pos = (s) => [((s.x + t * s.vx) % w + w) % w, ((s.y - sy * s.depth * .25) % (h * 3) + h * 3) % (h * 3)];
+    for (const s of stars) {
+      const [x, y] = pos(s);
+      if (y > h) continue;
+      ctx.globalAlpha = s.a * (reduced ? 1 : .7 + .3 * Math.sin(t * .001 * s.sp + s.tw));
+      ctx.fillStyle = '#eef1f8';
+      ctx.beginPath(); ctx.arc(x, y, s.r, 0, 6.283); ctx.fill();
+    }
+    if (!reduced) {
+      if (t > nextFigure) { spawnFigure(t, sy); nextFigure = t + 4000 + Math.random() * 4000; }
+      for (let i = figures.length - 1; i >= 0; i--) {
+        const f = figures[i];
+        const k = (t - f.t0) / f.dur;
+        if (k >= 1) { figures.splice(i, 1); continue; }
+        const draw = clamp(k / .35), fade = k < .7 ? 1 : 1 - (k - .7) / .3;
+        const pts = f.stars.map(pos);
+        ctx.globalAlpha = .45 * fade; ctx.strokeStyle = '#f4b860'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+        const segs = pts.length - 1, upto = draw * segs;
+        for (let j = 1; j <= segs; j++) {
+          const q = clamp(upto - (j - 1));
+          if (q <= 0) break;
+          ctx.lineTo(pts[j - 1][0] + (pts[j][0] - pts[j - 1][0]) * q, pts[j - 1][1] + (pts[j][1] - pts[j - 1][1]) * q);
+        }
+        ctx.stroke();
+        ctx.globalAlpha = .8 * fade; ctx.fillStyle = '#ffe6bf';
+        pts.forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x, y, 1.6, 0, 6.283); ctx.fill(); });
+      }
+      if (t > nextMeteor) { spawnMeteor(t); nextMeteor = t + 5000 + Math.random() * 7000; }
+      for (let i = meteors.length - 1; i >= 0; i--) {
+        const m = meteors[i];
+        const k = (t - m.t0) / m.dur;
+        if (k >= 1) { meteors.splice(i, 1); continue; }
+        const hx = m.x + m.dx * k * 420, hy = m.y + k * 240;
+        const tx = hx - m.dx * m.len * .87, ty = hy - m.len * .5;
+        const grad = ctx.createLinearGradient(hx, hy, tx, ty);
+        grad.addColorStop(0, 'rgba(255,240,220,.9)'); grad.addColorStop(1, 'rgba(255,240,220,0)');
+        ctx.globalAlpha = Math.sin(k * Math.PI);
+        ctx.strokeStyle = grad; ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(tx, ty); ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // The hero has its own sky; the field takes over once it scrolls away.
+  const update = () => {
+    const next = scrollY > hero.offsetHeight * .55;
+    if (next === on) return;
+    on = next;
+    canvas.classList.toggle('on', on);
+  };
+  addEventListener('scroll', update, { passive: true });
+  update();
+  addEventListener('resize', resize);
+  resize();
+  requestAnimationFrame(frame);
+})();
+
 // ---------- polish: loader, smooth scroll, active nav, spotlight ----------
 (() => {
   // Short branded loader; added by JS so the page never depends on it.

@@ -87,11 +87,16 @@ body::after {
   position: fixed; inset: 0 0 auto; z-index: 40; display: flex; align-items: center; gap: 28px;
   padding: 16px var(--gutter); transition: background .3s, backdrop-filter .3s, box-shadow .3s;
 }
+.top::before { content: ''; position: absolute; inset: 0 0 -24px; z-index: -1; pointer-events: none; background: linear-gradient(rgba(6, 9, 18, .78), rgba(6, 9, 18, 0)); }
 .top.scrolled { background: rgba(6, 9, 18, .72); backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2); box-shadow: 0 1px 0 var(--s08); }
 .brand { display: flex; align-items: center; gap: 10px; font: 700 18px/1 var(--disp); letter-spacing: -.03em; color: var(--star); }
 .brand svg { width: 20px; height: 20px; fill: var(--ember); }
-.nav { display: flex; gap: 24px; margin-left: auto; font-size: 14px; color: var(--s62); }
-.nav a:hover { color: var(--star); }
+.nav {
+  display: flex; gap: 4px; margin-left: auto; padding: 5px; border-radius: 14px; font-size: 14px; font-weight: 500; color: var(--s84);
+  background: rgba(8, 12, 24, .72); box-shadow: inset 0 0 0 1px var(--s14), 0 10px 30px -12px rgba(0, 0, 0, .8);
+  backdrop-filter: blur(14px) saturate(1.3); -webkit-backdrop-filter: blur(14px) saturate(1.3);
+}
+.nav a:hover { color: var(--star); background: var(--s08); }
 .progress { position: fixed; top: 0; left: 0; height: 2px; width: 100%; z-index: 41; background: var(--ember); transform-origin: 0 50%; transform: scaleX(0); }
 
 /* Sky */
@@ -207,8 +212,8 @@ body::after {
 
 /* Footer */
 .foot { padding: 0 var(--gutter) 28px; overflow: hidden; }
-.wordmark { margin: 0; font: 800 clamp(64px, 19vw, 300px)/.8 var(--disp); letter-spacing: -.065em; color: transparent; -webkit-text-stroke: 1px var(--s14); text-align: center; user-select: none; }
-.foot-row { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-top: 22px; font: 500 11px/1.5 var(--mono); color: var(--s38); }
+.foot-row { border-top: 1px solid var(--s08); padding-top: 18px; }
+.foot-row { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-top: 0; font: 500 11px/1.5 var(--mono); color: var(--s38); }
 
 /* Reveal */
 .js [data-reveal] { opacity: 0; transform: translateY(26px); transition: opacity .9s var(--ease), transform .9s var(--ease); }
@@ -255,10 +260,10 @@ body::after {
 
 /* ---------- v2: dynamic layer ---------- */
 .kicker i, .nav i { font-style: normal; color: var(--ember); margin-right: 8px; }
-.nav i { font: 500 10px/1 var(--mono); opacity: .7; }
-.nav a { position: relative; padding: 6px 0; transition: color .2s; }
-.nav a::after { content: ''; position: absolute; left: 0; right: 0; bottom: -2px; height: 1px; background: var(--ember); transform: scaleX(0); transform-origin: left; transition: transform .35s var(--ease); }
-.nav a.active { color: var(--star); }
+.nav i { font: 500 10px/1 var(--mono); opacity: .9; }
+.nav a { position: relative; padding: 8px 12px; border-radius: 10px; transition: color .2s, background .2s; text-shadow: 0 1px 8px rgba(0, 0, 0, .6); }
+.nav a::after { content: ''; position: absolute; left: 12px; right: 12px; bottom: 4px; height: 1px; background: var(--ember); transform: scaleX(0); transform-origin: left; transition: transform .35s var(--ease); }
+.nav a.active { color: var(--star); background: var(--s08); }
 .nav a.active::after { transform: scaleX(1); }
 .story-kicker { position: sticky; top: 96px; z-index: 2; margin: 0; padding-top: 10vh; }
 
@@ -402,3 +407,7 @@ body::after {
 }
 .d-list .flag { font: 500 9px/1 var(--mono); letter-spacing: .08em; color: var(--ember); }
 .live i.off { background: var(--s38); animation: none; box-shadow: none; }
+
+/* Page-wide moving star field behind everything below the hero */
+.field { position: fixed; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; opacity: 0; transition: opacity 1.2s var(--ease); }
+.field.on { opacity: 1; }
