@@ -115,25 +115,39 @@ export class Scorer {
 
   constructor(private readonly db: DB, private readonly client?: GmgnClient) {}
 
-  /** Batch PnL for 30 days via wallet_profits (100 wallets per call). */
+  /**
+   * Batch PnL for 30 days via wallet_profits (100 wallets per call). A 429
+   * retries the same chunk after the client's route pause instead of
+   * abandoning the run (it used to stop at the first chunk).
+   */
   private async fetchProfits(wallets: string[]): Promise<Map<string, { pnl: number; trades: number }>> {
     const out = new Map<string, { pnl: number; trades: number }>();
     if (!this.client) return out;
     for (let i = 0; i < wallets.length; i += 100) {
       const chunk = wallets.slice(i, i + 100);
-      try {
-        for (const row of await this.client.walletProfits(chunk, '30d')) {
-          out.set(row.wallet_address, { pnl: Number(row.total_profit) || 0, trades: (Number(row.buy) || 0) + (Number(row.sell) || 0) });
-        }
-      } catch (error) {
-        if (error instanceof GmgnError && error.isRateLimit) {
-          log.warn(`profits stopped at ${i}/${wallets.length}: rate limited`);
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+          for (const row of await this.client.walletProfits(chunk, '30d')) {
+            out.set(row.wallet_address, { pnl: Number(row.total_profit) || 0, trades: (Number(row.buy) || 0) + (Number(row.sell) || 0) });
+          }
+          break;
+        } catch (error) {
+          if (error instanceof GmgnError && error.isRateLimit && attempt < 3) continue;
+          log.warn(`profits chunk ${i / 100 + 1} failed`, error);
+          if (error instanceof GmgnError && error.isRateLimit) return out;
           break;
         }
-        log.warn('profits chunk failed', error);
       }
     }
     return out;
+  }
+
+  /** Last known 30-day PnL per wallet, so a failed fetch does not wipe it. */
+  private cachedProfits(since: number): Map<string, { pnl: number; trades: number }> {
+    const rows = this.db.prepare(`SELECT m.wallet, m.pnl_30d, m.trades_per_day FROM wallet_metrics m
+      WHERE m.pnl_30d IS NOT NULL AND m.computed_at >= ? AND m.computed_at = (SELECT MAX(computed_at) FROM wallet_metrics x WHERE x.wallet = m.wallet AND x.pnl_30d IS NOT NULL)`)
+      .all(since) as Array<{ wallet: string; pnl_30d: number; trades_per_day: number | null }>;
+    return new Map(rows.map((row) => [row.wallet, { pnl: row.pnl_30d, trades: (row.trades_per_day ?? 0) * 30 }]));
   }
 
   async run(now = Math.floor(Date.now() / 1000)): Promise<{ wallets: number; excluded: number; tiers: Record<string, number> }> {
@@ -155,7 +169,15 @@ export class Scorer {
       const tagReason = new Map<string, string | undefined>();
       for (const wallet of wallets) tagReason.set(wallet.address, exclusionByTags(JSON.parse(wallet.tags_json) as string[], { isKol: wallet.is_kol === 1 }));
       const live = wallets.filter((wallet) => !tagReason.get(wallet.address));
-      const profits = await this.fetchProfits(live.map((wallet) => wallet.address));
+      // Reuse PnL fetched in the last 12 h; ask GMGN only for the rest (feed wallets first).
+      const profits = this.cachedProfits(now - 36 * 3600);
+      const fresh = this.cachedProfits(now - 12 * 3600);
+      const observed = new Set((this.db.prepare(`SELECT DISTINCT wallet FROM trades WHERE source IN ('gmgn_sm', 'gmgn_kol') AND ts >= ?`)
+        .all(now - STALE_SEC) as Array<{ wallet: string }>).map((row) => row.wallet));
+      const missing = live.filter((wallet) => !fresh.has(wallet.address))
+        .sort((a, b) => Number(observed.has(b.address)) - Number(observed.has(a.address)))
+        .map((wallet) => wallet.address);
+      for (const [wallet, value] of await this.fetchProfits(missing)) profits.set(wallet, value);
 
       const pnlKnown = live.filter((wallet) => profits.has(wallet.address));
       const ranks = percentileRanks(pnlKnown.map((wallet) => profits.get(wallet.address)!.pnl));
@@ -202,14 +224,19 @@ export class Scorer {
       }
 
       // Only wallets with real evidence of skill can be A/B; the rest with a score are C.
-      const ranked = scored.filter((s) => s.score !== null && s.eligible).sort((a, b) => b.score! - a.score!);
+      // Two cohorts are ranked separately: wallets we see in the live feeds (the
+      // only ones that can form a live cluster today) and discovery-only
+      // wallets, whose evidence would otherwise take every A/B slot.
       const tiers = new Map<string, 'A' | 'B' | 'C'>();
-      ranked.forEach((s, i) => {
-        let tier = tierFor(i, ranked.length);
-        if (now - s.wallet.last_seen > STALE_SEC) tier = downgrade(tier);
-        if (s.dump !== null && s.dump >= KOL_DUMP_MAX) tier = 'C';
-        tiers.set(s.wallet.address, tier);
-      });
+      for (const cohort of [true, false]) {
+        const ranked = scored.filter((s) => s.score !== null && s.eligible && observed.has(s.wallet.address) === cohort).sort((a, b) => b.score! - a.score!);
+        ranked.forEach((s, i) => {
+          let tier = tierFor(i, ranked.length);
+          if (now - s.wallet.last_seen > STALE_SEC) tier = downgrade(tier);
+          if (s.dump !== null && s.dump >= KOL_DUMP_MAX) tier = 'C';
+          tiers.set(s.wallet.address, tier);
+        });
+      }
       for (const s of scored) if (s.score !== null && !tiers.has(s.wallet.address)) tiers.set(s.wallet.address, 'C');
 
       const update = this.db.prepare('UPDATE wallets SET tier = ?, score = ?, excluded_reason = ?, updated_at = ? WHERE address = ?');
@@ -226,7 +253,8 @@ export class Scorer {
         }
         this.db.prepare('DELETE FROM wallet_metrics WHERE computed_at < ?').run(now - 7 * DAY);
       })();
-      log.info(`scored ${wallets.length}: A ${counts.A}, B ${counts.B}, C ${counts.C}, excluded ${counts.X}, no data ${counts.none}; pnl for ${profits.size}`);
+      const feedAB = scored.filter((s) => observed.has(s.wallet.address) && ['A', 'B'].includes(tiers.get(s.wallet.address) ?? '') && !s.reason).length;
+      log.info(`scored ${wallets.length}: A ${counts.A}, B ${counts.B}, C ${counts.C}, excluded ${counts.X}, no data ${counts.none}; pnl for ${profits.size}; A/B seen in feeds ${feedAB}`);
       return { wallets: wallets.length, excluded: counts.X ?? 0, tiers: counts };
     } finally {
       this.running = false;

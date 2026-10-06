@@ -412,3 +412,16 @@ body::after {
 /* Page-wide moving star field behind everything below the hero */
 .field { position: fixed; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; opacity: 0; transition: opacity 1.2s var(--ease); }
 .field.on { opacity: 1; }
+
+/* GitHub link in the header */
+.gh {
+  display: inline-flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: 12px; font: 600 13px/1 var(--disp); color: var(--s84);
+  background: rgba(8, 12, 24, .72); box-shadow: inset 0 0 0 1px var(--s14); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  transition: color .2s, box-shadow .2s;
+}
+.gh svg { width: 16px; height: 16px; fill: currentColor; }
+.gh:hover { color: var(--star); box-shadow: inset 0 0 0 1px var(--s38); }
+.nav + .gh { margin-left: 0; }
+.foot-row a { color: var(--s62); text-decoration: underline; text-underline-offset: 3px; }
+.foot-row a:hover { color: var(--star); }
+@media (max-width: 900px) { .gh { margin-left: auto; } .gh span { display: none; } .top .btn-sm { margin-left: 0; } }

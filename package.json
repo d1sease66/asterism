@@ -12,6 +12,8 @@
     "start": "node dist/server.js",
     "test": "tsc && node --test tests/*.test.mjs",
     "stats": "node scripts/collector-stats.mjs",
+    "score": "node scripts/score.mjs",
+    "report:wallets": "node scripts/report-wallets.mjs",
     "deploy:vercel": "npm run build && API_ORIGIN=${API_ORIGIN:-https://asterism.188-253-26-129.sslip.io} node scripts/build-vercel.mjs && cd .vercel-out && vercel deploy --prod --yes && rm -f .env.local",
     "deploy:vercel:snapshot": "npm run build && node scripts/build-vercel.mjs && cd .vercel-out && vercel deploy --prod --yes && rm -f .env.local"
   },

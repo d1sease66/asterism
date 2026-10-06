@@ -7,6 +7,8 @@ import { GmgnClient } from './gmgn/client.js';
 import { startHttp } from './http.js';
 import { logger } from './log.js';
 import { feed, pulse, signals, sky, summary, walletDetail, wallets } from './public.js';
+import { Outcomes } from './scorer/outcomes.js';
+import { cleanUp } from './retention.js';
 import { Scorer } from './scorer/scorer.js';
 import { SignalEngine } from './signals/engine.js';
 import { TokenChecker } from './signals/filters.js';
@@ -47,6 +49,7 @@ startHttp(PORT, {
 const discovery = new Discovery(db, client);
 const scorer = new Scorer(db, client);
 const tracker = new SignalTracker(db, client);
+const outcomes = new Outcomes(db, client);
 const HOUR = 3600_000;
 const DISCOVERY_EVERY_MS = Number(process.env.DISCOVERY_EVERY_HOURS || 2) * HOUR;
 const SCORE_EVERY_MS = Number(process.env.SCORE_EVERY_HOURS || 6) * HOUR;
@@ -91,6 +94,10 @@ if (collecting) {
   setTimeout(() => void scorePass(), 2 * 60_000);
   setInterval(() => void scorePass(), SCORE_EVERY_MS);
   setInterval(() => void tracker.run().catch((error) => log.error('tracker failed', error)), 5 * 60_000);
+  setInterval(() => void outcomes.run().catch((error) => log.error('outcomes failed', error)), 15 * 60_000);
+  const retention = () => { try { cleanUp(db); } catch (error) { log.error('retention failed', error); } };
+  setTimeout(retention, 5 * 60_000);
+  setInterval(retention, 24 * HOUR);
   if (telegram) {
     void telegram.poll(commandHandler(db)).catch((error) => log.error('telegram polling stopped', error));
     setInterval(() => void dailySummary().catch((error) => log.error('daily summary failed', error)), 10 * 60_000);

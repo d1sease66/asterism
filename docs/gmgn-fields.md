@@ -168,3 +168,18 @@ For a wallet with 150 trades in a token, the first buy is on page 3, which is ex
 | 8hSh…     | 9 004 | — | +1% on $3.5M | bot |
 
 The spec's "> 300 trades per day" filter would cut these out, but metrics must be computed from `buy` in `stats`, not only from our own records.
+
+## Later findings (2026-10-06, production)
+
+- **Rate limit is about 10 weight units per minute**, not per second. Every 429 so far followed ~11 units
+  inside a minute. A fresh process cannot see what the previous one spent, so the client starts with a
+  full bucket.
+- **Expensive routes look limited on their own.** `wallet_activity`, `wallet_profits` and `market/rank`
+  drew 429s while the shared budget was well under the limit. The client keeps a minimum gap per route
+  (20 s / 20 s / 15 s, plus 10 s for `token_top_traders` and 5 s for klines) and doubles it after a 429 on
+  that route. A 429 on a background route no longer slows the feeds.
+- **Any 429 bans the whole IP briefly** (`RATE_LIMIT_BANNED`, 30–36 s): requests from other routes during
+  that window fail too and extend the ban.
+- **`market/rank` nests its payload**: `json.data.data.rank` (the CLI prints `json.data`, which hides it).
+- **Successful responses carry no rate-limit headers**; only 429 bodies have `reset_at`.
+- **Known route tokens are route legs even as single trades** (a lone WSOL "buy" is never a signal).
