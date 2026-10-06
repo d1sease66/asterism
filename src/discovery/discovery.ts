@@ -113,9 +113,12 @@ export class Discovery {
       }).slice(0, this.options.tokensPerRun);
       log.info(`${winners.length} winners, scanning ${due.length}`);
       let hits = 0;
+      let promoted = this.promote(); // hits left by an interrupted pass
       for (const winner of due) {
         try {
           hits += await this.scan(winner);
+          // Promote as we go: a pass takes over an hour and may be cut by a restart.
+          promoted += this.promote();
         } catch (error) {
           if (error instanceof GmgnError && error.isRateLimit) {
             log.warn('rate limited, stopping this pass');
@@ -124,7 +127,6 @@ export class Discovery {
           log.warn(`scan ${winner.symbol} failed`, error);
         }
       }
-      const promoted = this.promote();
       log.info(`pass done: ${due.length} tokens, ${hits} early hits, ${promoted} wallets promoted`);
       return { winners: winners.length, scanned: due.length, hits, promoted };
     } finally {
