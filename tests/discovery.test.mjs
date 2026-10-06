@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { pickWinners, earlyBuyers, EARLY } from '../dist/discovery/early.js';
+import { pickWinners, earlyBuyers, classifyTraders, EARLY } from '../dist/discovery/early.js';
 import { activityToTrades } from '../dist/discovery/discovery.js';
 
 const fixture = (name) => JSON.parse(readFileSync(new URL(`../fixtures/${name}.json`, import.meta.url), 'utf8'));
@@ -57,4 +57,16 @@ test('activity → trades keeps only buys/sells and marks route tokens', () => {
   assert.equal(trades.length, acts.filter((a) => a.event_type === 'buy' || a.event_type === 'sell').length);
   assert.ok(trades.every((t) => t.token === AGENCY && t.amountUsd > 0 && t.ts > 1.7e9 && !t.route));
   assert.ok(trades.some((t) => t.side === 'sell'));
+});
+
+test('tagged traders: GMGN smart money that made ≥ $1k late is kept as "tagged"; untagged late is not', () => {
+  const winner = { address: 'T', symbol: 'T', athMc: 10_000_000, mc: 1, supply: 1_000_000_000, createdAt: 1000 };
+  const base = { addr_type: 0, is_suspicious: false, transfer_in: false, history_bought_cost: 5000, buy_tx_count_cur: 3, start_holding_at: 2000, maker_token_tags: [], avg_cost: 0.005 };
+  const hits = classifyTraders([
+    { ...base, address: 'SMART', profit: 4000, tags: ['smart_degen'] },
+    { ...base, address: 'PLAIN', profit: 4000, tags: [] },
+    { ...base, address: 'SMALL', profit: 600, tags: ['smart_degen'] },
+    { ...base, address: 'EARLY', profit: 4000, tags: [], avg_cost: 0.0005 },
+  ], winner);
+  assert.deepEqual(hits.map((h) => [h.wallet, h.kind]).sort(), [['EARLY', 'early'], ['SMART', 'tagged']]);
 });

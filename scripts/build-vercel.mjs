@@ -27,6 +27,8 @@ const vercel = {
 };
 
 if (apiOrigin) {
+  // The backend sets its own short cache headers for live data.
+  vercel.headers = vercel.headers.filter((rule) => !rule.source.startsWith('/api'));
   vercel.rewrites = [{ source: '/api/:path*', destination: `${apiOrigin}/api/:path*` }];
   console.log(`live mode → /api proxied to ${apiOrigin}`);
 } else {

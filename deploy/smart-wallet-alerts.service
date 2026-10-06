@@ -1,0 +1,27 @@
+[Unit]
+Description=Smart Wallet Alerts (GMGN collector, discovery, Asterism API)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=smartw
+Group=smartw
+WorkingDirectory=/opt/smart-wallet-alerts
+EnvironmentFile=/opt/smart-wallet-alerts/.env
+# GMGN only answers over IPv4 and its DNS also returns IPv6 addresses.
+ExecStart=/usr/bin/node --dns-result-order=ipv4first dist/server.js
+Restart=always
+RestartSec=10
+MemoryMax=400M
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/smart-wallet-alerts/data
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=smart-wallet-alerts
+
+[Install]
+WantedBy=multi-user.target

@@ -4,7 +4,7 @@ import type { RankItem, WalletActivity } from '../gmgn/types.js';
 import { logger } from '../log.js';
 import { ROUTE_TOKENS, type NormalizedTrade } from '../collector/normalize.js';
 import { TradeStore } from '../collector/store.js';
-import { earlyBuyers, pickWinners, type EarlyHit, type Winner } from './early.js';
+import { classifyTraders, pickWinners, type EarlyHit, type Winner } from './early.js';
 
 // Reverse search (spec 6.4): wallets that bought winners early. Runs on a
 // budget at background priority so the live feed always goes first.
@@ -18,20 +18,24 @@ export interface DiscoveryOptions {
   smartDegenPass: boolean;
   /** A token is rescanned after this long. */
   rescanSec: number;
-  /** Distinct winners a wallet must be early in. */
+  /** Distinct winners a wallet must be early in to get its history backfilled. */
   minWinners: number;
+  /** One early entry is enough to join the base with at least this profit. */
+  singleEarlyProfit: number;
   /** Activity backfills per sync run (weight 3 each). */
   walletsPerSync: number;
   resyncSec: number;
 }
 
 // GMGN allows ~10 units/min and the feeds use about half, so a pass of
-// 30 tokens (150 units) takes roughly 40 minutes in the background.
+// 40 tokens × 2 trader lists (400 units) takes ~1.5 h in the background;
+// passes never overlap, the next one starts on the following tick.
 export const DEFAULT_DISCOVERY: DiscoveryOptions = {
-  tokensPerRun: 30,
-  smartDegenPass: false,
+  tokensPerRun: 40,
+  smartDegenPass: true,
   rescanSec: 3 * 86400,
   minWinners: 2,
+  singleEarlyProfit: 3000,
   walletsPerSync: 20,
   resyncSec: 6 * 3600,
 };
@@ -80,7 +84,11 @@ export class Discovery {
 
   async winners(): Promise<Winner[]> {
     const lists: RankItem[] = [];
-    for (const [interval, orderBy] of [['24h', 'history_highest_market_cap'], ['6h', 'history_highest_market_cap']] as const) {
+    const sources: Array<['1h' | '6h' | '24h', string]> = [
+      ['24h', 'history_highest_market_cap'], ['6h', 'history_highest_market_cap'], ['1h', 'history_highest_market_cap'],
+      ['24h', 'volume'], ['24h', 'smart_degen_count'],
+    ];
+    for (const [interval, orderBy] of sources) {
       try {
         lists.push(...await this.client.trending(interval, { orderBy, limit: 100 }));
       } catch (error) {
@@ -130,19 +138,22 @@ export class Discovery {
     for (const tag of this.options.smartDegenPass ? [undefined, 'smart_degen'] : [undefined]) {
       const { list } = await this.client.tokenTraders(winner.address, { orderBy: 'profit', limit: 100, tag });
       traders += list?.length ?? 0;
-      for (const hit of earlyBuyers(list ?? [], winner)) byWallet.set(hit.wallet, hit);
+      for (const hit of classifyTraders(list ?? [], winner)) byWallet.set(hit.wallet, hit);
     }
     const now = Math.floor(Date.now() / 1000);
-    const insertHit = this.db.prepare(`INSERT INTO discovery_hits (wallet, token, entry_ratio, profit, cost, start_ts, found_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(wallet, token) DO UPDATE SET entry_ratio = excluded.entry_ratio,
-      profit = excluded.profit, cost = excluded.cost, start_ts = excluded.start_ts, found_at = excluded.found_at`);
+    const insertHit = this.db.prepare(`INSERT INTO discovery_hits (wallet, token, entry_ratio, profit, cost, start_ts, found_at, kind, tags_json, twitter)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(wallet, token) DO UPDATE SET entry_ratio = excluded.entry_ratio,
+      profit = excluded.profit, cost = excluded.cost, start_ts = excluded.start_ts, found_at = excluded.found_at,
+      kind = excluded.kind, tags_json = excluded.tags_json, twitter = excluded.twitter`);
     const saveToken = this.db.prepare(`INSERT INTO discovery_tokens (address, symbol, ath_mc, mc, supply, created_at, processed_at, traders, hits)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(address) DO UPDATE SET symbol = excluded.symbol, ath_mc = excluded.ath_mc,
       mc = excluded.mc, supply = excluded.supply, processed_at = excluded.processed_at, traders = excluded.traders, hits = excluded.hits`);
     const upsertTokenRow = this.db.prepare(`INSERT INTO tokens (address, symbol, created_at, first_seen) VALUES (?, ?, ?, ?)
       ON CONFLICT(address) DO UPDATE SET symbol = COALESCE(symbol, excluded.symbol), created_at = COALESCE(created_at, excluded.created_at)`);
     this.db.transaction(() => {
-      for (const hit of byWallet.values()) insertHit.run(hit.wallet, hit.token, hit.entryRatio, hit.profit, hit.cost, hit.startTs, now);
+      for (const hit of byWallet.values()) {
+        insertHit.run(hit.wallet, hit.token, hit.entryRatio, hit.profit, hit.cost, hit.startTs, now, hit.kind, JSON.stringify(hit.tags), hit.twitter);
+      }
       saveToken.run(winner.address, winner.symbol, winner.athMc, winner.mc, winner.supply, winner.createdAt, now, traders, byWallet.size);
       upsertTokenRow.run(winner.address, winner.symbol, winner.createdAt, now);
     })();
@@ -150,17 +161,38 @@ export class Discovery {
     return byWallet.size;
   }
 
-  /** Wallets early in ≥ minWinners winners join the base as discovery wallets. */
+  /**
+   * Discovery wallets join the base when they were early in ≥ minWinners
+   * winners, early once with a big profit, or GMGN-tagged and profitable.
+   * New rows carry the trader's tags and X handle so exclusion rules apply.
+   */
   promote(): number {
     const now = Math.floor(Date.now() / 1000);
-    const rows = this.db.prepare(`SELECT wallet, COUNT(*) AS n, MIN(start_ts) AS first FROM discovery_hits
-      GROUP BY wallet HAVING COUNT(DISTINCT token) >= ?`).all(this.options.minWinners) as Array<{ wallet: string; n: number; first: number | null }>;
-    const insert = this.db.prepare(`INSERT INTO wallets (address, first_seen, last_seen, source, tags_json, updated_at, discovered_at)
-      VALUES (?, ?, ?, 'discovery', '[]', ?, ?) ON CONFLICT(address) DO UPDATE SET discovered_at = COALESCE(discovered_at, excluded.discovered_at)`);
+    const rows = this.db.prepare(`SELECT wallet,
+        COUNT(DISTINCT CASE WHEN kind = 'early' THEN token END) AS early_n,
+        MAX(CASE WHEN kind = 'early' THEN profit END) AS early_best,
+        SUM(kind = 'tagged') AS tagged_n,
+        MIN(start_ts) AS first,
+        MAX(tags_json) AS tags_json, MAX(twitter) AS twitter
+      FROM discovery_hits GROUP BY wallet
+      HAVING early_n >= ? OR (early_n >= 1 AND early_best >= ?) OR tagged_n >= 1`)
+      .all(this.options.minWinners, this.options.singleEarlyProfit) as Array<{ wallet: string; first: number | null; tags_json: string | null; twitter: string | null }>;
+    const insert = this.db.prepare(`INSERT INTO wallets (address, first_seen, last_seen, source, twitter_username, tags_json, is_kol, updated_at, discovered_at)
+      VALUES (@wallet, @first, @first, 'discovery', @twitter, @tags, @kol, @now, @now)
+      ON CONFLICT(address) DO UPDATE SET discovered_at = COALESCE(discovered_at, excluded.discovered_at),
+        twitter_username = COALESCE(twitter_username, excluded.twitter_username)`);
     let promoted = 0;
     this.db.transaction(() => {
       for (const row of rows) {
-        const result = insert.run(row.wallet, row.first ?? now, row.first ?? now, now, now);
+        const tags = (JSON.parse(row.tags_json ?? '[]') as string[]).filter((tag) => !['top_holder', 'whale', 'diamond_hands', 'paper_hands'].includes(tag));
+        const result = insert.run({
+          wallet: row.wallet,
+          first: row.first ?? now,
+          twitter: row.twitter,
+          tags: JSON.stringify([...new Set(tags)].sort()),
+          kol: tags.includes('renowned') || tags.includes('kol') ? 1 : 0,
+          now,
+        });
         if (result.changes > 0) promoted += 1;
       }
     })();
@@ -170,9 +202,11 @@ export class Discovery {
   /** Backfill real recent trades of discovery wallets (they are not in the feeds). */
   async syncActivity(): Promise<{ wallets: number; trades: number }> {
     const now = Math.floor(Date.now() / 1000);
+    // History backfill is expensive (weight 3, own route limit): only wallets early in ≥ minWinners winners.
     const due = this.db.prepare(`SELECT w.address FROM wallets w LEFT JOIN wallet_sync s ON s.wallet = w.address
       WHERE w.discovered_at IS NOT NULL AND (s.synced_at IS NULL OR s.synced_at < ?)
-      ORDER BY s.synced_at IS NOT NULL, s.synced_at LIMIT ?`).all(now - this.options.resyncSec, this.options.walletsPerSync) as Array<{ address: string }>;
+        AND (SELECT COUNT(DISTINCT h.token) FROM discovery_hits h WHERE h.wallet = w.address AND h.kind = 'early') >= ?
+      ORDER BY s.synced_at IS NOT NULL, s.synced_at LIMIT ?`).all(now - this.options.resyncSec, this.options.minWinners, this.options.walletsPerSync) as Array<{ address: string }>;
     const mark = this.db.prepare(`INSERT INTO wallet_sync (wallet, synced_at, newest_ts, trades) VALUES (?, ?, ?, ?)
       ON CONFLICT(wallet) DO UPDATE SET synced_at = excluded.synced_at, newest_ts = MAX(COALESCE(newest_ts, 0), excluded.newest_ts), trades = trades + excluded.trades`);
     const seen = this.db.prepare('UPDATE wallets SET last_seen = MAX(last_seen, ?), updated_at = ? WHERE address = ?');

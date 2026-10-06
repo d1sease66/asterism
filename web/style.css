@@ -304,7 +304,7 @@ body::after {
 .pill.B { color: var(--ink); background: var(--star); }
 .pill.C { color: var(--star); background: var(--s14); }
 .pill.X { color: var(--down); background: rgba(240, 138, 122, .12); }
-.tape-empty { padding: 120px 14px 0; text-align: center; font: 500 11px/1.5 var(--mono); color: var(--s38); }
+.tape-rows li.tape-empty { display: block; height: auto; border: 0; padding: 120px 14px 0; text-align: center; font: 500 11px/1.5 var(--mono); color: var(--s38); animation: none; }
 
 /* Tier pills in tables follow the same palette */
 .tiers i { color: var(--ink); background: var(--ember); }

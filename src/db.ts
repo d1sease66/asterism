@@ -168,6 +168,12 @@ const MIGRATIONS: string[] = [
     '7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs', 'J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn',
     'mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So', 'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN');
   `,
+  `
+  -- Discovery also keeps GMGN-tagged profitable traders that entered late.
+  ALTER TABLE discovery_hits ADD COLUMN kind TEXT NOT NULL DEFAULT 'early';
+  ALTER TABLE discovery_hits ADD COLUMN tags_json TEXT;
+  ALTER TABLE discovery_hits ADD COLUMN twitter TEXT;
+  `,
 ];
 
 export function openDb(dataDir: string, file = 'swa.sqlite'): DB {

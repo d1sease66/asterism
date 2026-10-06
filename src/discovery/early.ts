@@ -19,6 +19,12 @@ export const EARLY = {
   maxBuys: 200,        // more buys in one token than this is a bot
 };
 
+/** GMGN-tagged smart money / KOL that made money on a winner, early or not. */
+export const TAGGED = {
+  tags: ['smart_degen', 'renowned', 'kol'],
+  minProfit: 1000,
+};
+
 export interface Winner {
   address: string;
   symbol: string;
@@ -48,6 +54,7 @@ export function pickWinners(items: RankItem[], now = Math.floor(Date.now() / 100
 }
 
 export interface EarlyHit {
+  kind: 'early' | 'tagged';
   wallet: string;
   token: string;
   entryRatio: number;
@@ -59,11 +66,12 @@ export interface EarlyHit {
 }
 
 /**
- * Early profitable buyer: average entry ≤ 10% of ATH market cap. Average cost
- * is an upper bound for the first buy, so this never needs the per-wallet
- * activity call that the spec suggested.
+ * Classifies a winner's top traders. `early`: average entry ≤ 10% of ATH
+ * market cap — average cost is an upper bound for the first buy, so no
+ * per-wallet activity call is needed. `tagged`: GMGN smart money / KOL that
+ * made ≥ $1k on the winner but entered later.
  */
-export function earlyBuyers(traders: TokenTrader[], winner: Winner): EarlyHit[] {
+export function classifyTraders(traders: TokenTrader[], winner: Winner): EarlyHit[] {
   const hits: EarlyHit[] = [];
   for (const trader of traders) {
     if (!trader?.address || trader.addr_type !== 0 || trader.is_suspicious || trader.transfer_in) continue;
@@ -77,8 +85,11 @@ export function earlyBuyers(traders: TokenTrader[], winner: Winner): EarlyHit[] 
     const start = trader.start_holding_at ? Number(trader.start_holding_at) : null;
     if (start !== null && start < winner.createdAt - 60) continue; // impossible history, bad data
     const entryRatio = (avg * winner.supply) / winner.athMc;
-    if (!(entryRatio <= EARLY.maxEntryRatio)) continue;
+    const early = entryRatio <= EARLY.maxEntryRatio;
+    const tagged = profit >= TAGGED.minProfit && TAGGED.tags.some((tag) => tags.includes(tag));
+    if (!early && !tagged) continue;
     hits.push({
+      kind: early ? 'early' : 'tagged',
       wallet: trader.address,
       token: winner.address,
       entryRatio,
@@ -90,4 +101,9 @@ export function earlyBuyers(traders: TokenTrader[], winner: Winner): EarlyHit[] 
     });
   }
   return hits;
+}
+
+/** Early profitable buyers only (spec 6.4). */
+export function earlyBuyers(traders: TokenTrader[], winner: Winner): EarlyHit[] {
+  return classifyTraders(traders, winner).filter((hit) => hit.kind === 'early');
 }

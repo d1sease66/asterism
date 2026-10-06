@@ -588,9 +588,9 @@ const Drawer = (() => {
     const src = w.discovered_at ? 'Discovered' + (w.source !== 'discovery' ? ' · ' + (SOURCE[w.source] || w.source) : '') : SOURCE[w.source] || w.source;
     const tok = (t) => `${t.logo ? `<img src="${esc(t.logo)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">` : '<img alt="">'}$${esc(t.symbol || short(t.token))}`;
     const earlyHtml = early.length ? `
-      <h3 class="d-h">Early in winners <small>entry ÷ ATH market cap</small></h3>
+      <h3 class="d-h">Profitable in winners <small>entry ÷ ATH market cap</small></h3>
       <ul class="d-list early">${early.map((e) => `<li>
-        <span><span class="sym">${tok(e)}</span><span class="note">ATH ${usd(e.ath_mc)} · entered at ${(e.entry_ratio * 100).toFixed(1)}% of ATH · in ${usd(e.cost)}</span></span>
+        <span><span class="sym">${tok(e)}</span><span class="note">ATH ${usd(e.ath_mc)} · ${e.kind === 'tagged' ? 'GMGN-tagged, entered' : 'entered'} at ${(e.entry_ratio * 100).toFixed(1)}% of ATH · in ${usd(e.cost)}</span></span>
         <a class="r tx-link" href="https://gmgn.ai/sol/token/${esc(e.token)}?maker=${esc(w.address)}" target="_blank" rel="noopener">${usd(e.profit)}</a></li>`).join('')}</ul>` : '';
     const txHtml = trades.length ? `<ul class="d-list">${trades.map((t) => `<li>
         <span class="tm">${new Date(t.ts * 1000).toISOString().slice(5, 16).replace('T', ' ')}</span>
@@ -658,7 +658,11 @@ const Tape = (() => {
       const fresh = data.trades.filter((tr) => !seen.has(tr.tx + tr.w + tr.t + tr.side));
       fresh.forEach((tr) => seen.add(tr.tx + tr.w + tr.t + tr.side));
       if (seen.size > 5000) seen.clear();
-      if (!fresh.length) return;
+      if (!fresh.length) {
+        if (!list.children.length) list.innerHTML = `<li class="tape-empty">Waiting for trades older than ${data.delay_min} min…</li>`;
+        return;
+      }
+      list.querySelector('.tape-empty')?.remove();
       lastTs = Math.max(lastTs, fresh.at(-1).ts);
       if (lag === null) {
         // Start 40 s behind the newest trade so there is a backlog to play.

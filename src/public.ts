@@ -116,7 +116,8 @@ export function summary(db: DB, now = Math.floor(Date.now() / 1000)) {
     } else if (wallet.tier && wallet.tier in tiers) tiers[wallet.tier]! += 1;
   }
   const trades24h = one<{ n: number }>('SELECT COUNT(*) AS n FROM trades WHERE ts BETWEEN ? AND ? AND route = 0', cutoff - 86400, cutoff).n;
-  const since = one<{ t: number | null }>('SELECT MIN(ts) AS t FROM trades').t;
+  // Start of our own observation, not the oldest backfilled trade.
+  const since = one<{ t: number | null }>('SELECT MIN(ts) AS t FROM poll_log').t;
   const signals7d = one<{ n: number }>('SELECT COUNT(*) AS n FROM signals WHERE created_at BETWEEN ? AND ?', cutoff - 7 * 86400, cutoff).n;
   const discovered = one<{ n: number }>('SELECT COUNT(*) AS n FROM wallets WHERE discovered_at IS NOT NULL').n;
   const winners = one<{ n: number }>('SELECT COUNT(*) AS n FROM discovery_tokens').n;
@@ -247,9 +248,9 @@ export function walletDetail(db: DB, address: string, now = Math.floor(Date.now(
     excluded_reason, discovered_at FROM wallets WHERE address = ?`).get(address) as (Record<string, unknown> & { tags_json: string; excluded_reason: string | null }) | undefined;
   if (!row) return { error: 'unknown wallet' };
   const tags = JSON.parse(row.tags_json) as string[];
-  const early = db.prepare(`SELECT h.token, h.entry_ratio, h.profit, h.cost, h.start_ts, d.symbol, d.ath_mc, k.logo
+  const early = db.prepare(`SELECT h.token, h.kind, h.entry_ratio, h.profit, h.cost, h.start_ts, d.symbol, d.ath_mc, k.logo
     FROM discovery_hits h LEFT JOIN discovery_tokens d ON d.address = h.token LEFT JOIN tokens k ON k.address = h.token
-    WHERE h.wallet = ? ORDER BY h.profit DESC LIMIT 20`).all(address);
+    WHERE h.wallet = ? ORDER BY h.kind = 'early' DESC, h.profit DESC LIMIT 20`).all(address);
   const trades = db.prepare(`SELECT t.tx_hash AS tx, t.token, t.side, t.amount_usd AS usd, t.price_usd AS price, t.is_open_or_close AS full,
       t.ts, t.source, k.symbol, k.logo
     FROM trades t LEFT JOIN tokens k ON k.address = t.token
