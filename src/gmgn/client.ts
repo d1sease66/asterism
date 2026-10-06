@@ -48,6 +48,18 @@ export interface ClientStats {
 
 const RETRIES = 3;
 
+// Expensive routes look rate limited on their own (2026-10-06: wallet_activity
+// drew 429s while the shared budget was well under the limit), so each gets a
+// minimum gap between calls that doubles after a 429 on that route.
+const ROUTE_SPACING_MS: Record<string, number> = {
+  '/v1/user/wallet_activity': 20_000,
+  '/v1/user/wallet_stats': 20_000,
+  '/v1/user/wallet_profits': 20_000,
+  '/v1/market/token_top_traders': 10_000,
+  '/v1/market/token_kline': 5_000,
+};
+const MAX_ROUTE_SPACING_MS = 5 * 60_000;
+
 function buildUrl(path: string, query: Query): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
@@ -65,6 +77,8 @@ function sleep(ms: number): Promise<void> {
 export class GmgnClient {
   readonly limiter: WeightedLimiter;
   readonly stats: ClientStats = { requests: 0, errors: 0, rateLimited: 0 };
+  private readonly spacing = new Map(Object.entries(ROUTE_SPACING_MS));
+  private readonly nextAt = new Map<string, number>();
 
   constructor(private readonly apiKey = GMGN_API_KEY, limiter?: WeightedLimiter) {
     if (!apiKey) throw new Error('GMGN_API_KEY is not configured (env or ~/.config/gmgn/.env)');
@@ -78,20 +92,31 @@ export class GmgnClient {
     let lastError: unknown;
     for (let attempt = 1; attempt <= RETRIES; attempt += 1) {
       const priority = options.priority ?? PRIORITY.background;
+      const gap = (this.nextAt.get(path) ?? 0) - Date.now();
+      if (gap > 0) await sleep(gap);
       // Anything below feed priority leaves headroom so a feed poll never waits long.
       await this.limiter.acquire(options.weight, priority, priority < PRIORITY.feed ? GMGN_FEED_RESERVE : 0);
+      const spacing = this.spacing.get(path);
+      if (spacing) this.nextAt.set(path, Date.now() + spacing);
       try {
         return await this.once<T>(method, path, options);
       } catch (error) {
         lastError = error;
         if (error instanceof GmgnError && error.isRateLimit) {
           // Wait for the server's reset instead of retrying: every request
-          // during a ban extends it.
+          // during a ban extends it. A 429 on a feed means the shared budget is
+          // too high; on a background route it means that route needs more room.
           const until = (error.resetAt ? error.resetAt * 1000 : Date.now() + 60_000) + 1_000;
-          this.limiter.penalize(until);
+          const isFeed = priority >= PRIORITY.feed;
+          this.limiter.penalize(until, isFeed);
+          if (!isFeed) {
+            const wider = Math.min(MAX_ROUTE_SPACING_MS, (spacing ?? 10_000) * 2);
+            this.spacing.set(path, wider);
+            this.nextAt.set(path, until + wider);
+          }
           this.stats.rateLimited += 1;
           this.stats.lastRateLimitAt = Date.now();
-          log.warn(`${path}: ${error.apiError ?? '429'}, pausing ${Math.round((until - Date.now()) / 1000)}s, rate now ${this.limiter.rate.toFixed(2)}/s`);
+          log.warn(`${path}: ${error.apiError ?? '429'}, pausing ${Math.round((until - Date.now()) / 1000)}s, rate ${this.limiter.rate.toFixed(3)}/s, route gap ${Math.round((this.spacing.get(path) ?? 0) / 1000)}s`);
           throw error;
         }
         const retriable = !(error instanceof GmgnError) || error.status >= 500;

@@ -67,9 +67,10 @@ export class WeightedLimiter {
     });
   }
 
-  /** Stop all requests until `untilMs` and slow down. */
-  penalize(untilMs: number): void {
+  /** Stop all requests until `untilMs`; with `slowDown` also halve the rate. */
+  penalize(untilMs: number, slowDown = true): void {
     this.pausedUntil = Math.max(this.pausedUntil, untilMs);
+    if (!slowDown) return;
     this.rate = Math.max(this.minRate, this.rate / 2);
     this.lastRecoverAt = this.now();
   }

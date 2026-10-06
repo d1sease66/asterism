@@ -64,3 +64,12 @@ test('background reserve: a feed request is never starved by background work', a
   await limiter.acquire(5, 0, 4);          // background waits until level ≤ 0 (9 + 5 + 4 − 9 = 9 s)
   assert.equal(c.t - t0, 9000);
 });
+
+test('penalize without slow-down pauses but keeps the rate', async () => {
+  const c = clock();
+  const limiter = new WeightedLimiter({ ratePerSec: 1, capacity: 2, now: c.now, sleep: c.sleep });
+  limiter.penalize(5_000, false);
+  assert.equal(limiter.rate, 1);
+  await limiter.acquire(1);
+  assert.equal(c.t, 5_000);
+});
