@@ -2,7 +2,7 @@ import type { DB } from './db.js';
 import { CLUSTER_MIN_WALLETS, CLUSTER_WINDOW_MIN, MIN_BUY_USD, PUBLIC_DELAY_MIN } from './config.js';
 import { exclusionByTags } from './rules.js';
 
-// Read-only data for the Asterism dashboard. Everything derived from trades
+// Read-only data for the Quorum dashboard. Everything derived from trades
 // is cut at now − PUBLIC_DELAY_MIN so the site never front-runs the bot.
 
 const SKY_WINDOW_SEC = 24 * 3600;
@@ -50,7 +50,7 @@ export function sky(db: DB, now = Math.floor(Date.now() / 1000)) {
     last: row.last_ts,
     ...walletState(row),
   }));
-  return { cutoff, delay_min: PUBLIC_DELAY_MIN, window_sec: SKY_WINDOW_SEC, stars, asterisms: convergences(db, cutoff) };
+  return { cutoff, delay_min: PUBLIC_DELAY_MIN, window_sec: SKY_WINDOW_SEC, stars, quorums: convergences(db, cutoff) };
 }
 
 /**

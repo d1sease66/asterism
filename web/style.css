@@ -1,4 +1,4 @@
-/* Asterism — minimal, product-first. One surface, 1px lines, one accent. */
+/* Quorum — minimal, product-first. One surface, 1px lines, one accent. */
 :root {
   --bg: #0b0d10;
   --panel: #111419;
@@ -32,7 +32,9 @@ b { color: var(--text); font-weight: 600; }
 .top { position: sticky; top: 0; z-index: 40; background: rgba(11, 13, 16, .82); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
 .top-in { width: min(1160px, 100% - var(--gutter) * 2); margin-inline: auto; height: 60px; display: flex; align-items: center; gap: 24px; }
 .brand { display: inline-flex; align-items: center; gap: 9px; font: 700 16px/1 var(--disp); letter-spacing: -.02em; color: var(--text); }
-.brand svg { width: 17px; height: 17px; fill: var(--accent); }
+.brand svg { width: 18px; height: 18px; fill: var(--accent); }
+.brand .q-ring { fill: none; stroke: var(--accent); stroke-width: 1.8; }
+.brand .q-edge { fill: none; stroke: var(--accent); stroke-width: 1.3; stroke-linejoin: round; opacity: .55; }
 .nav { display: flex; gap: 4px; margin-left: 12px; }
 .nav a { padding: 7px 11px; border-radius: 8px; font-size: 14px; color: var(--muted); transition: color .15s, background .15s; }
 .nav a:hover, .nav a.active { color: var(--text); background: var(--panel-2); }

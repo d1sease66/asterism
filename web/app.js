@@ -1,4 +1,4 @@
-// Asterism dashboard. Vanilla JS, one rAF loop per canvas, data from
+// Quorum dashboard. Vanilla JS, one rAF loop per canvas, data from
 // /api/public/* (already delayed server-side). No invented numbers: when a
 // source is empty the page says so.
 
@@ -133,7 +133,7 @@ function renderSignals() {
     return;
   }
   // No signals yet: show raw convergences, clearly labelled.
-  const raw = state.sky?.asterisms || [];
+  const raw = state.sky?.quorums || [];
   list.innerHTML = `<li class="sig-empty"><b>No signals in the public window yet.</b>${raw.length ? 'Below: raw matches of 3+ non-bot wallets in one token within 30 minutes. Not signals.' : 'Signals appear here 15 minutes after the bot sends them.'}</li>`
     + raw.slice(0, 12).map((a) => `<li><div>${tok(a.symbol, a.logo, a.token, 'sym')}<div class="what">raw match · ${a.wallets.length} wallets · ${usd(a.usd)} · ${hhmm(a.end)}</div></div><div class="res"><span class="muted">raw</span></div></li>`).join('');
 }
@@ -229,9 +229,9 @@ const Sky = (() => {
   function layout() {
     if (!state.sky) return;
     const mobile = w < 560;
-    // Fixed slots inside the card keep asterisms apart and clear of the caption and legend.
+    // Fixed slots inside the card keep quorums apart and clear of the caption and legend.
     const slots = mobile ? [[.3, .3], [.68, .55], [.32, .8]] : [[.24, .3], [.74, .28], [.5, .58], [.2, .72], [.8, .7], [.5, .22]];
-    groups = state.sky.asterisms.slice(0, mobile ? 3 : slots.length).map((a, i) => {
+    groups = state.sky.quorums.slice(0, mobile ? 3 : slots.length).map((a, i) => {
       const [sx, sy] = slots[i];
       const cx = w * (sx + (hash(a.token, 7) - .5) * .04);
       const cy = h * (sy + (hash(a.token, 9) - .5) * .04);
@@ -241,7 +241,7 @@ const Sky = (() => {
     groups.forEach((gr) => gr.wallets.forEach((addr) => { if (!member.has(addr)) member.set(addr, gr); }));
     const known = new Set(state.sky.stars.map((s) => s.a));
     const live = [...extra.values()].filter((s) => !known.has(s.a));
-    // The card shows the most active wallets (the API sorts by volume) plus asterism members.
+    // The card shows the most active wallets (the API sorts by volume) plus quorum members.
     const shown = state.sky.stars.filter((s, i) => i < 700 || member.has(s.a));
     stars = [...shown, ...live].map((s) => {
       const gr = member.get(s.a);
@@ -262,7 +262,7 @@ const Sky = (() => {
     });
     byAddr.clear();
     stars.forEach((star) => byAddr.set(star.a, star));
-    // Order members by angle so the asterism line reads as a shape, not a scribble.
+    // Order members by angle so the quorum line reads as a shape, not a scribble.
     groups.forEach((gr) => gr.members.sort((p, q) => Math.atan2(p.y - gr.cy, p.x - gr.cx) - Math.atan2(q.y - gr.cy, q.x - gr.cx)));
   }
 
@@ -331,7 +331,7 @@ const Sky = (() => {
       ctx.strokeStyle = `rgb(${f.color})`; ctx.lineWidth = f.big ? 1.5 : 1;
       ctx.beginPath(); ctx.arc(x, y, f.star.size + 3 + ease(k) * (f.big ? 34 : 18), 0, 6.283); ctx.stroke();
     }
-    // Asterisms: lines draw in after the stars, then the label.
+    // Quorums: lines draw in after the stars, then the label.
     const lp = reduced ? 1 : ease((t - born - 700) / 1600);
     groups.forEach((gr, gi) => {
       const pts = gr.members.map(pos);

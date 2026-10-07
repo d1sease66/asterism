@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Solana smart-wallet scoring and cluster alerts (GMGN) + Asterism dashboard",
+  "description": "Solana smart-wallet scoring and cluster alerts (GMGN) + Quorum dashboard",
   "engines": {
     "node": ">=22"
   },

@@ -23,7 +23,7 @@ interface TgResponse<T> { ok: boolean; result?: T; description?: string; error_c
 export interface Chat { id: string; threadId?: number }
 export type CommandHandler = (command: string, args: string[], chat: Chat) => Promise<string | undefined>;
 
-export const SUBSCRIBED_TEXT = 'You will get Asterism alerts here: clusters of strong Solana wallets buying the same token. '
+export const SUBSCRIBED_TEXT = 'You will get Quorum alerts here: clusters of strong Solana wallets buying the same token. '
   + 'Commands: /stats /top /wallet &lt;address&gt; /token &lt;CA&gt; /mute &lt;CA&gt; /stop. Not investment advice.';
 
 export function isTelegramConfigured(): boolean {

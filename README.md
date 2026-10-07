@@ -1,12 +1,12 @@
-# Asterism · Smart Wallet Alerts
+# Quorum · Smart Wallet Alerts
 
 Solana smart-money alerts that only fire **when strong wallets agree**.
 
-Asterism watches every wallet GMGN labels as smart money or KOL, throws out the bots, ranks the rest by
+Quorum watches every wallet GMGN labels as smart money or KOL, throws out the bots, ranks the rest by
 how their buys actually performed, and sends a Telegram alert when several high-ranked wallets buy the
 same token within 30 minutes. A public dashboard shows the same data with a 15-minute delay.
 
-- **Dashboard:** https://solasterism.xyz (mirror: https://asterism-pi.vercel.app)
+- **Dashboard:** https://solasterism.xyz (mirror: https://solquorum.vercel.app)
 - **Telegram bot:** [@solasterismbot](https://t.me/solasterismbot)
 - **X:** [@useAsterism](https://x.com/useAsterism)
 - **Public API:** https://solasterism.xyz/api/public/summary
@@ -21,7 +21,7 @@ GMGN feeds ──► collector ──► trades ─┬─► signals ──► T
                                      │      │ tiers A/B/C
 GMGN trending + top traders ──► discovery ──► wallets ──► scorer ◄── buy outcomes (klines)
                                      │
-                                     └─► public API (−15 min) ──► Asterism dashboard
+                                     └─► public API (−15 min) ──► Quorum dashboard
 ```
 
 | module | what it does | when |

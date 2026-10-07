@@ -56,7 +56,7 @@ export function commandHandler(db: DB): CommandHandler {
           `30d PnL: ${usd(row.pnl_30d as number | null)} · trades/day: ${row.trades_per_day !== null ? Number(row.trades_per_day).toFixed(1) : '—'}`,
           `Early in winners: ${row.early_n ?? 0} · hit 2×/24h: ${row.hit_rate_2x_24h !== null ? `${Math.round(Number(row.hit_rate_2x_24h) * 100)}%` : 'n/a'}`,
           `Trades in our records: ${trades.n}`,
-          `<a href="${SITE_URL}/#w=${address}">Asterism</a> · <a href="https://solscan.io/account/${address}">Solscan</a> · <a href="https://gmgn.ai/sol/address/${address}">GMGN</a>`,
+          `<a href="${SITE_URL}/#w=${address}">Quorum</a> · <a href="https://solscan.io/account/${address}">Solscan</a> · <a href="https://gmgn.ai/sol/address/${address}">GMGN</a>`,
         ].join('\n');
       }
       case 'token': {

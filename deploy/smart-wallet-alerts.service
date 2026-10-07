@@ -1,5 +1,5 @@
 [Unit]
-Description=Smart Wallet Alerts (GMGN collector, discovery, Asterism API)
+Description=Smart Wallet Alerts (GMGN collector, discovery, Quorum API)
 After=network-online.target
 Wants=network-online.target
 
