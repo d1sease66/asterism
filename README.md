@@ -8,6 +8,7 @@ same token within 30 minutes. A public dashboard shows the same data with a 15-m
 
 - **Dashboard:** https://asterism-pi.vercel.app
 - **Telegram bot:** [@solasterismbot](https://t.me/solasterismbot)
+- **X:** [@useAsterism](https://x.com/useAsterism)
 - **Public API:** https://asterism.188-253-26-129.sslip.io/api/public/summary
 
 Read-only by design: no wallet keys, no signing, no swaps. Not investment advice.
