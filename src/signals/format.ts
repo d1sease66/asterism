@@ -17,7 +17,7 @@ export interface SignalWallet {
   pnl30: number | null;
 }
 
-export const SITE_URL = process.env.SITE_URL?.trim() || 'https://asterism-pi.vercel.app';
+export const SITE_URL = process.env.SITE_URL?.trim() || 'https://solasterism.xyz';
 
 export function esc(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
