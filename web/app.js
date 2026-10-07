@@ -72,28 +72,40 @@ async function load() {
   if (sky.status === 'fulfilled') { state.sky = sky.value; Sky.setData(sky.value); }
   if (signals.status === 'fulfilled') state.signals = signals.value;
   if (wallets.status === 'fulfilled') state.wallets = wallets.value;
-  renderHud();
+  renderStats();
   renderSignals();
   renderWallets();
 }
 
-function renderHud() {
+function setText(key, text) {
+  $$(`[data-k="${key}"]`).forEach((el) => (el.textContent = text));
+}
+
+function renderStats() {
   const sky = state.sky, sum = state.summary;
-  if (sum) $$('[data-delay]').forEach((el) => (el.textContent = sum.delay_min));
-  if (sky) {
-    const noise = sky.stars.filter((s) => s.excluded).length;
-    setNum('stars', sky.stars.length);
-    $('[data-k="noise"]').textContent = sky.stars.length ? Math.round((noise / sky.stars.length) * 100) + '%' : '—';
+  if (sum) {
+    $$('[data-delay]').forEach((el) => (el.textContent = sum.delay_min));
+    const t = sum.tiers || {};
+    setNum('wallets', sum.wallets);
+    setNum('ab', (t.A || 0) + (t.B || 0));
+    setNum('trades24h', sum.trades_24h);
+    setNum('signals7d', sum.signals_7d);
+    setText('trades24h-2', nf.format(sum.trades_24h));
+    setText('excluded', nf.format(sum.excluded));
+    setText('signals7d-2', nf.format(sum.signals_7d));
+    setText('tiers', sum.scored ? `A ${nf.format(t.A || 0)} · B ${nf.format(t.B || 0)} · C ${nf.format(t.C || 0)}` : 'first scoring pending');
+    if (sum.watching_since) $('[data-since]').textContent = `Data from GMGN · watching since ${hhmm(sum.watching_since)} · ${nf.format(sum.wallets)} wallets.`;
   }
+  if (sky) setText('stars-cap', `${nf.format(sky.stars.length)} wallets · 24h`);
   if (sum?.bot) {
     $$('[data-bot]').forEach((a) => { a.href = `https://t.me/${sum.bot}`; a.target = '_blank'; a.rel = 'noopener'; });
-    const note = $('[data-bot-note]');
-    if (note) note.textContent = '@' + sum.bot;
+    const handle = $('[data-bot-handle]');
+    if (handle) { handle.textContent = '@' + sum.bot; handle.dataset.copy = '@' + sum.bot; }
   }
-  if (sum?.watching_since) $('[data-since]').textContent = 'Watching since ' + hhmm(sum.watching_since) + ' · ' + nf.format(sum.wallets) + ' wallets tracked';
 }
 function setNum(key, value) {
   const el = $(`[data-k="${key}"]`);
+  if (!el || value == null) return;
   const from = +(el.dataset.v || 0);
   el.dataset.v = value;
   if (reduced || from === value) { el.textContent = nf.format(value); return; }
@@ -107,36 +119,27 @@ function setNum(key, value) {
 }
 
 // ---------- signals ----------
+const TYPE_LABEL = { cluster: 'Cluster', cluster_kol: 'Cluster + KOL', a_first_entry: 'A-wallet first entry', exit_cluster: 'Exit cluster' };
 function renderSignals() {
-  const body = $('[data-table="signals"] tbody');
-  const empty = $('[data-empty="signals"]');
-  const list = state.signals?.signals || [];
-  if (list.length) {
-    empty.hidden = true;
-    body.innerHTML = list.map((s) => {
+  const list = $('[data-list="signals"]');
+  const signals = state.signals?.signals || [];
+  if (signals.length) {
+    list.innerHTML = signals.slice(0, 30).map((s) => {
       const ws = JSON.parse(s.wallets_json || '[]');
       const max = s.max_24h && s.price_at_signal ? s.max_24h / s.price_at_signal : null;
-      const now = s.price_24h && s.price_at_signal ? s.price_24h / s.price_at_signal : null;
-      return `<tr><td class="muted">${hhmm(s.created_at)}</td><td>${tok(s.symbol, s.logo, s.token)}</td>
-        <td>${tiers(ws.map((w) => w.tier))}</td><td class="r muted">—</td><td class="r">${usd(s.mc_at_signal)}</td>
-        <td class="r ${max >= 2 ? 'up' : ''}">${max ? max.toFixed(1) + '×' : '<span class="muted">tracking</span>'}</td>
-        <td class="r ${now == null ? '' : now >= 1 ? 'up' : 'down'}">${now ? now.toFixed(2) + '×' : '—'}</td></tr>`;
+      const res = max ? `<span class="${max >= 2 ? 'side-buy' : ''}">${max.toFixed(2)}×</span><small>24h max</small>` : '<span class="muted">tracking</span><small>result in 24h</small>';
+      return `<li><div>${tok(s.symbol, s.logo, s.token, 'sym')}<div class="what">${TYPE_LABEL[s.type] || s.type} · ${ws.length} wallet${ws.length === 1 ? '' : 's'} · MC ${usd(s.mc_at_signal)} · ${hhmm(s.created_at)}</div></div><div class="res">${res}</div></li>`;
     }).join('');
     return;
   }
-  // No scored signals yet: show raw convergences, clearly labelled.
+  // No signals yet: show raw convergences, clearly labelled.
   const raw = state.sky?.asterisms || [];
-  empty.hidden = false;
-  empty.innerHTML = raw.length
-    ? '<b>No signals yet — ranks are still being computed.</b>Below are raw matches: 3+ wallets not flagged as bots bought one token within 30 minutes. These are not signals.'
-    : '<b>No signals yet.</b>The first asterisms appear after the first wallet scoring run.';
-  body.innerHTML = raw.map((a) => `<tr><td class="muted">${hhmm(a.end)}</td><td>${tok(a.symbol, a.logo, a.token)}</td>
-    <td>${tiers(a.wallets.map(() => null))} <span class="muted">${a.wallets.length}</span></td><td class="r">${usd(a.usd)}</td>
-    <td class="r muted">—</td><td class="r muted">raw</td><td class="r muted">—</td></tr>`).join('');
+  list.innerHTML = `<li class="sig-empty"><b>No signals in the public window yet.</b>${raw.length ? 'Below: raw matches of 3+ non-bot wallets in one token within 30 minutes. Not signals.' : 'Signals appear here 15 minutes after the bot sends them.'}</li>`
+    + raw.slice(0, 12).map((a) => `<li><div>${tok(a.symbol, a.logo, a.token, 'sym')}<div class="what">raw match · ${a.wallets.length} wallets · ${usd(a.usd)} · ${hhmm(a.end)}</div></div><div class="res"><span class="muted">raw</span></div></li>`).join('');
 }
-function tok(symbol, logo, address) {
+function tok(symbol, logo, address, cls = 'tok') {
   const img = logo ? `<img src="${esc(logo)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">` : '<img alt="">';
-  return `<a class="tok" href="https://gmgn.ai/sol/token/${esc(address)}" target="_blank" rel="noopener">${img}$${esc(symbol || short(address))}</a>`;
+  return `<a class="${cls}" href="https://gmgn.ai/sol/token/${esc(address)}" target="_blank" rel="noopener">${img}$${esc(symbol || short(address))}</a>`;
 }
 function tiers(list) {
   return `<span class="tiers">${list.slice(0, 6).map((t) => `<i class="${t === 'A' ? '' : t === 'B' ? 'b' : 'n'}">${t || '·'}</i>`).join('')}</span>`;
@@ -199,7 +202,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- live sky ----------
 const Sky = (() => {
-  const section = $('.sky');
+  const section = $('.sky-card');
   const canvas = $('.sky-canvas');
   const ctx = canvas.getContext('2d');
   const tip = $('.sky-tip');
@@ -225,27 +228,22 @@ const Sky = (() => {
 
   function layout() {
     if (!state.sky) return;
-    const mobile = w < 900;
-    // Asterism anchors live in the upper-right, away from the headline.
-    // Fixed slots keep asterisms apart and clear of the headline and HUD.
-    const slots = mobile
-      ? [[.3, .2], [.7, .85]]
-      : [[.44, .22], [.8, .13], [.63, .34], [.27, .12], [.5, .45], [.92, .3]];
-    // On phones the asterisms live in the free band between header and copy.
-    const copyTop = mobile ? $('.sky-copy').offsetTop : 0;
-    groups = state.sky.asterisms.slice(0, slots.length).map((a, i) => {
+    const mobile = w < 560;
+    // Fixed slots inside the card keep asterisms apart and clear of the caption and legend.
+    const slots = mobile ? [[.3, .3], [.68, .55], [.32, .8]] : [[.24, .3], [.74, .28], [.5, .58], [.2, .72], [.8, .7], [.5, .22]];
+    groups = state.sky.asterisms.slice(0, mobile ? 3 : slots.length).map((a, i) => {
       const [sx, sy] = slots[i];
       const cx = w * (sx + (hash(a.token, 7) - .5) * .04);
-      const cy = mobile
-        ? 96 + Math.max(40, copyTop - 150) * sy
-        : Math.max(150, h * (sy + (hash(a.token, 9) - .5) * .04));
-      return { ...a, cx, cy, r: (mobile ? 30 : 70) + a.wallets.length * (mobile ? 3 : 6), members: [] };
+      const cy = h * (sy + (hash(a.token, 9) - .5) * .04);
+      return { ...a, cx, cy, r: (mobile ? 26 : 38) + a.wallets.length * 3, members: [] };
     });
     const member = new Map();
     groups.forEach((gr) => gr.wallets.forEach((addr) => { if (!member.has(addr)) member.set(addr, gr); }));
     const known = new Set(state.sky.stars.map((s) => s.a));
     const live = [...extra.values()].filter((s) => !known.has(s.a));
-    stars = [...state.sky.stars, ...live].map((s) => {
+    // The card shows the most active wallets (the API sorts by volume) plus asterism members.
+    const shown = state.sky.stars.filter((s, i) => i < 700 || member.has(s.a));
+    stars = [...shown, ...live].map((s) => {
       const gr = member.get(s.a);
       let x, y;
       if (gr) {
@@ -256,9 +254,8 @@ const Sky = (() => {
         x = hash(s.a, 1) * w; y = hash(s.a, 2) * h;
       }
       const tier = s.excluded ? 'x' : s.tier || 'c';
-      const k = mobile ? 1 : 1.35;
-      const base = { A: 2.6, B: 2.1, c: 1.5, C: 1.5, x: .95 }[tier] * k;
-      const size = base + (tier === 'x' ? 0 : Math.min(1.4, Math.log10((s.vol || 0) + 10) * .28));
+      const base = { A: 1.9, B: 1.5, c: 1.1, C: 1.1, x: .7 }[tier];
+      const size = base + (tier === "x" ? 0 : Math.min(.8, Math.log10((s.vol || 0) + 10) * .15));
       const star = { ...s, x, y, tier, size, depth: .3 + hash(s.a, 4) * .7, phase: hash(s.a, 6) * 6.28, speed: .6 + hash(s.a, 8) * 1.6, gr, hot: 0, born: s.born || 0 };
       if (gr) gr.members.push(star);
       return star;
@@ -311,9 +308,9 @@ const Sky = (() => {
       const heat = s.hot ? clamp(1 - (t - s.hot) / 1400) : 0;
       const fadeIn = s.born ? clamp((t - s.born) / 900) : 1;
       const a = Math.min(1, (s.tier === 'x' ? .26 : s.tier === 'A' ? 1 : s.tier === 'B' ? .9 : .74) * tw * intro + heat * .7) * fadeIn;
-      if (s.tier !== 'x') {
-        const gs = s.size * (s.tier === 'A' ? 9 : s.tier === 'B' || s.gr ? 7 : 4.5);
-        ctx.globalAlpha = a * (s.tier === 'A' || s.gr ? .6 : .32);
+      if (s.tier === 'A' || s.gr) {
+        const gs = s.size * 6;
+        ctx.globalAlpha = a * .35;
         ctx.drawImage(glow, x - gs / 2, y - gs / 2, gs, gs);
       }
       ctx.globalAlpha = a;
@@ -406,158 +403,6 @@ const Sky = (() => {
   return { setData, flare };
 })();
 
-// ---------- story: noise → asterism ----------
-(() => {
-  const story = $('.story');
-  const canvas = $('.story-canvas');
-  const ctx = canvas.getContext('2d');
-  const steps = $$('.step');
-  const labels = $$('.sl');
-  const alert = $('.alert');
-  let w = 0, h = 0, s = 0, target = 0, visible = false;
-
-  // Seeded dots: 72 bots, 3 A, 7 B, 18 C — the proportions we see in the feed.
-  let seed = 7;
-  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  const dots = Array.from({ length: 100 }, (_, i) => ({
-    kind: i < 72 ? 'bot' : i < 75 ? 'A' : i < 82 ? 'B' : 'C',
-    sx: rnd(), sy: rnd(), ph: rnd() * 6.28, sp: .5 + rnd() * 1.5, fall: .5 + rnd(),
-    ox: 0, oy: 0,
-  }));
-  // Ranked positions as offsets from the token node: A stars close, B/C on outer rings.
-  dots.filter((d) => d.kind !== 'bot').forEach((d, i) => {
-    const ring = d.kind === 'A' ? .17 : d.kind === 'B' ? .3 : .4;
-    const ang = d.kind === 'A' ? -Math.PI / 2 + (i * 2 * Math.PI) / 3 + .3 : rnd() * 6.28;
-    d.ox = Math.cos(ang) * ring * .78;
-    d.oy = Math.sin(ang) * ring;
-  });
-  // On phones the alert card covers the lower half of the stage.
-  const nodeAt = () => (innerWidth < 900 ? { x: .5, y: .3, k: .62 } : { x: .42, y: .42, k: 1 });
-
-  function resize() {
-    const r = canvas.getBoundingClientRect();
-    w = r.width; h = r.height;
-    canvas.width = Math.round(w * DPR()); canvas.height = Math.round(h * DPR());
-    ctx.setTransform(DPR(), 0, 0, DPR(), 0, 0);
-  }
-
-  function progress() {
-    // s ∈ [0, 3]: 0 at step 1 centred, 3 at step 4 centred.
-    const vh = innerHeight;
-    const first = steps[0].getBoundingClientRect();
-    const span = steps[1].getBoundingClientRect().top - first.top;
-    const focus = innerWidth < 900 ? .72 : .5;
-    const c = vh * focus - (first.top + first.height / 2);
-    return clamp(c / span, 0, 3);
-  }
-
-  function draw(t) {
-    ctx.clearRect(0, 0, w, h);
-    const k1 = ease(s - .35);          // bots go
-    const k2 = ease((s - 1.3) / .9);   // survivors rank
-    const k3 = ease((s - 2.2) / .8);   // asterism
-    const pad = 28;
-    const node = nodeAt();
-    const nx = pad + node.x * (w - pad * 2), ny = pad + node.y * (h - pad * 2);
-    const placeA = [];
-    for (const d of dots) {
-      const jx = reduced ? 0 : Math.sin(t * .0012 * d.sp + d.ph) * 6 * (1 - k2);
-      const jy = reduced ? 0 : Math.cos(t * .0010 * d.sp + d.ph) * 6 * (1 - k2);
-      let x = pad + d.sx * (w - pad * 2) + jx, y = pad + d.sy * (h - pad * 2) + jy;
-      let a = .55, r = 1.6, color = '238,241,248';
-      if (d.kind === 'bot') {
-        const red = clamp(k1 * 2);
-        color = red > .5 ? '240,138,122' : '238,241,248';
-        a = .55 * (1 - clamp((k1 - .35) / .65));
-        y += clamp((k1 - .35) / .65) * 70 * d.fall;
-        if (a <= 0.01) continue;
-      } else {
-        const tx = pad + (node.x + d.ox * node.k) * (w - pad * 2), ty = pad + (node.y + d.oy * node.k) * (h - pad * 2);
-        x += (tx - x) * k2; y += (ty - y) * k2;
-        const big = d.kind === 'A' ? 3.4 : d.kind === 'B' ? 2.5 : 1.7;
-        r = 1.6 + (big - 1.6) * k2;
-        a = .55 + (d.kind === 'C' ? 0 : .45) * k2;
-        if (d.kind === 'A') placeA.push([x, y]);
-        if (k2 > .05 && d.kind !== 'C') {
-          ctx.globalAlpha = a * .35 * k2; ctx.fillStyle = `rgba(${color},1)`;
-          ctx.beginPath(); ctx.arc(x, y, r * 3.2, 0, 6.283); ctx.fill();
-        }
-      }
-      ctx.globalAlpha = a; ctx.fillStyle = `rgb(${color})`;
-      ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
-      if (d.kind === 'A' && k2 > .6 && k3 < .5) {
-        ctx.globalAlpha = (k2 - .6) / .4 * (1 - k3 * 2); ctx.fillStyle = '#eef1f8'; ctx.font = '500 10px "JetBrains Mono", monospace';
-        ctx.fillText('A', x + 7, y - 7);
-      }
-    }
-    // Asterism: A stars connect to each other and to the token node.
-    if (k3 > 0 && placeA.length === 3) {
-      ctx.globalAlpha = 1; ctx.strokeStyle = '#f4b860'; ctx.lineWidth = 1.2;
-      const order = [placeA[0], placeA[1], placeA[2], placeA[0]];
-      ctx.beginPath(); ctx.moveTo(order[0][0], order[0][1]);
-      const segs = 3, upto = k3 * segs;
-      for (let i = 1; i <= segs; i++) {
-        const f = clamp(upto - (i - 1));
-        if (f <= 0) break;
-        ctx.lineTo(order[i - 1][0] + (order[i][0] - order[i - 1][0]) * f, order[i - 1][1] + (order[i][1] - order[i - 1][1]) * f);
-      }
-      ctx.stroke();
-      ctx.globalAlpha = k3 * .45; ctx.setLineDash([3, 5]);
-      ctx.beginPath(); placeA.forEach(([x, y]) => { ctx.moveTo(x, y); ctx.lineTo(nx, ny); }); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.globalAlpha = k3; ctx.fillStyle = '#f4b860';
-      ctx.beginPath(); ctx.arc(nx, ny, 4 + 2 * Math.sin(t * .004), 0, 6.283); ctx.fill();
-      ctx.font = '600 12px "JetBrains Mono", monospace'; ctx.fillText('$SYMBOL', nx + 12, ny + 4);
-    }
-    ctx.globalAlpha = 1;
-    labels.forEach((l, i) => l.classList.toggle('on', i === 0 ? s < .6 : i === 1 ? s >= .6 && s < 1.5 : s >= 1.5 && s < 2.4));
-    const ka = clamp((s - 2.55) / .4);
-    alert.style.opacity = ka;
-    alert.style.setProperty('--k', ka);
-    steps.forEach((el, i) => el.classList.toggle('on', Math.abs(s - i) < .5));
-  }
-
-  function loop(t) {
-    if (visible) {
-      target = progress();
-      s += reduced ? target - s : (target - s) * .12;
-      draw(t);
-    }
-    requestAnimationFrame(loop);
-  }
-  new ResizeObserver(resize).observe(canvas);
-  new IntersectionObserver(([e]) => (visible = e.isIntersecting), { rootMargin: '200px' }).observe(story);
-  requestAnimationFrame(loop);
-})();
-
-// ---------- chrome: header, progress, reveals ----------
-(() => {
-  const top = $('.top');
-  const bar = document.createElement('div');
-  bar.className = 'progress';
-  document.body.append(bar);
-  let ticking = false;
-  addEventListener('scroll', () => {
-    if (ticking) return;
-    ticking = true;
-    requestAnimationFrame(() => {
-      top.classList.toggle('scrolled', scrollY > 40);
-      const max = document.documentElement.scrollHeight - innerHeight;
-      bar.style.transform = `scaleX(${max > 0 ? scrollY / max : 0})`;
-      ticking = false;
-    });
-  }, { passive: true });
-
-  const io = new IntersectionObserver((entries) => entries.forEach((e) => {
-    if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
-  }), { threshold: .15 });
-  $$('[data-reveal], [data-pop]').forEach((el) => io.observe(el));
-  // Headline lines rise in sequence.
-  const h1 = $('.h1');
-  $$('.line > span', h1).forEach((el, i) => (el.style.transitionDelay = 80 + i * 110 + 'ms'));
-  requestAnimationFrame(() => h1.classList.add('in'));
-})();
-
 // ---------- wallet drawer: profile + real transactions ----------
 const Drawer = (() => {
   const root = $('.drawer');
@@ -570,7 +415,6 @@ const Drawer = (() => {
     if (location.hash.startsWith('#w=')) history.replaceState(null, '', location.pathname + location.search);
     root.hidden = true;
     current = null;
-    window.__lenis?.start();
     document.documentElement.style.overflow = '';
   }
 
@@ -578,7 +422,6 @@ const Drawer = (() => {
     if (!address) return;
     current = address;
     root.hidden = false;
-    window.__lenis?.stop();
     document.documentElement.style.overflow = 'hidden';
     body.innerHTML = `<p class="d-kicker">Wallet</p><p class="d-addr">${esc(address)}</p><p class="d-empty">Loading transactions…</p>`;
     let data;
@@ -631,12 +474,13 @@ const Drawer = (() => {
 
 if (SNAPSHOT) {
   const at = new Date(SNAPSHOT * 1000).toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
-  const live = $('.live');
-  if (live) live.innerHTML = '<i class="off"></i>Snapshot';
-  const delay = $('.tape-delay');
-  if (delay) delay.textContent = at;
-  const kicker = $('.sky-copy .kicker span:last-child');
-  if (kicker) kicker.innerHTML = `Solana · smart money · snapshot ${at}`;
+  $$('.live-dot').forEach((d) => (d.style.background = 'var(--muted)'));
+  const eyebrow = $('[data-eyebrow]');
+  if (eyebrow) eyebrow.textContent = `Snapshot · ${at}`;
+  const title = $('[data-tape-title]');
+  if (title) title.textContent = 'Trade tape · snapshot';
+  const meta = $('[data-tape-meta]');
+  if (meta) meta.textContent = at;
 }
 
 // ---------- live tape: replay the delayed feed at its real pace ----------
@@ -654,7 +498,7 @@ const Tape = (() => {
   toggle.addEventListener('click', () => {
     hideNoise = !hideNoise;
     toggle.setAttribute('aria-pressed', String(hideNoise));
-    toggle.textContent = hideNoise ? 'Show noise' : 'Hide noise';
+    toggle.textContent = hideNoise ? 'Show bots' : 'Hide bots';
     $$('li', list).forEach((li) => (li.hidden = hideNoise && li.classList.contains('noise')));
   });
 
@@ -726,273 +570,17 @@ const Tape = (() => {
   poll();
   setInterval(poll, 6000);
   setInterval(tick, reduced ? 1000 : 120);
-  setInterval(() => { if (lag !== null) setNum('tpm', tpm()); }, 2000);
   return {};
 })();
 
-// ---------- pulse: trades per 15 min, kept vs dimmed ----------
-const Pulse = (() => {
-  const canvas = $('.chart-canvas');
-  const ctx = canvas.getContext('2d');
-  const tip = $('.chart-tip');
-  const wrap = $('.chart');
-  let data = null, w = 0, h = 0, shown = 0, hover = -1, started = false;
-
-  function resize() {
-    const r = canvas.getBoundingClientRect();
-    w = r.width; h = r.height;
-    canvas.width = Math.round(w * DPR()); canvas.height = Math.round(h * DPR());
-    ctx.setTransform(DPR(), 0, 0, DPR(), 0, 0);
-    draw();
-  }
-
-  function set(d) {
-    data = d;
-    $('[data-p="trades"]').textContent = nf.format(d.totals.trades);
-    $('[data-p="wallets"]').textContent = nf.format(d.totals.wallets);
-    $('[data-p="tokens"]').textContent = nf.format(d.totals.tokens);
-    $('[data-p="usd"]').textContent = usd(d.buckets.reduce((sum, b) => sum + b.usd, 0));
-    const first = d.buckets.find((b) => b.real + b.noise > 0);
-    $('[data-chart-note]').textContent = first && first.t > d.buckets[0].t + 900
-      ? 'collecting since ' + new Date(first.t * 1000).toISOString().slice(11, 16) + ' UTC'
-      : 'last 24 hours · UTC';
-    draw();
-  }
-
-  function draw() {
-    if (!data || !w) return;
-    ctx.clearRect(0, 0, w, h);
-    const bs = data.buckets;
-    const max = Math.max(10, ...bs.map((b) => b.real + b.noise));
-    const padB = 22, padT = 8;
-    const bw = w / bs.length;
-    const k = reduced ? 1 : ease(shown);
-    // grid
-    ctx.globalAlpha = 1; ctx.strokeStyle = 'rgba(238,241,248,.06)'; ctx.lineWidth = 1;
-    for (let g = 1; g <= 3; g++) {
-      const y = Math.round(padT + (h - padB - padT) * (1 - g / 3)) + .5;
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
-      ctx.fillStyle = 'rgba(238,241,248,.3)'; ctx.font = '500 10px "JetBrains Mono", monospace';
-      ctx.fillText(nf.format(Math.round((max * g) / 3)), 4, y - 4);
-    }
-    bs.forEach((b, i) => {
-      const x = i * bw + 1;
-      const bwi = Math.max(1, bw - 2);
-      const hr = ((h - padB - padT) * b.real / max) * k;
-      const hn = ((h - padB - padT) * b.noise / max) * k;
-      const base = h - padB;
-      ctx.globalAlpha = hover === -1 || hover === i ? 1 : .45;
-      ctx.fillStyle = 'rgba(240,138,122,.5)';
-      ctx.fillRect(x, base - hr - hn, bwi, hn);
-      ctx.fillStyle = '#eef1f8';
-      ctx.fillRect(x, base - hr, bwi, hr);
-      if (i % 16 === 0) {
-        ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(238,241,248,.38)'; ctx.font = '500 10px "JetBrains Mono", monospace';
-        ctx.fillText(new Date(b.t * 1000).toISOString().slice(11, 16), x, h - 6);
-      }
-    });
-    ctx.globalAlpha = 1;
-  }
-
-  function animate(t0) {
-    const step = (t) => {
-      shown = clamp((t - t0) / 1200);
-      draw();
-      if (shown < 1) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
-  }
-
-  canvas.addEventListener('pointermove', (e) => {
-    if (!data) return;
-    const r = canvas.getBoundingClientRect();
-    const i = Math.floor(((e.clientX - r.left) / r.width) * data.buckets.length);
-    const b = data.buckets[i];
-    if (!b) return;
-    hover = i; draw();
-    const wr = wrap.getBoundingClientRect();
-    tip.hidden = false;
-    tip.style.left = e.clientX - wr.left + 'px';
-    tip.style.top = e.clientY - wr.top + 'px';
-    const total = b.real + b.noise;
-    tip.innerHTML = `${new Date(b.t * 1000).toISOString().slice(11, 16)} UTC<br><b>${nf.format(b.real)}</b> kept · ${nf.format(b.noise)} dimmed${total ? ` (${Math.round((b.noise / total) * 100)}%)` : ''}<br>kept volume ${usd(b.usd)}`;
-  });
-  canvas.addEventListener('pointerleave', () => { hover = -1; tip.hidden = true; draw(); });
-  new ResizeObserver(resize).observe(canvas);
-  new IntersectionObserver(([e]) => {
-    if (e.isIntersecting && !started) { started = true; animate(performance.now()); }
-  }, { threshold: .3 }).observe(canvas);
-
-  async function load() {
-    try { set(await get('/api/public/pulse')); } catch { /* keep */ }
-  }
-  load();
-  setInterval(load, 60_000);
-  return {};
-})();
-
-// ---------- page-wide field: drifting stars, meteors, passing constellations ----------
+// Active section in the header nav.
 (() => {
-  const canvas = $('.field');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  const hero = $('#sky');
-  const dpr = Math.min(1.5, window.devicePixelRatio || 1);
-  let w = 0, h = 0, stars = [], meteors = [], figures = [], on = false, last = 0, nextMeteor = 0, nextFigure = 0;
-
-  function resize() {
-    w = innerWidth; h = innerHeight;
-    canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const count = Math.round(Math.min(220, (w * h) / 7000));
-    let seed = 11;
-    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    stars = Array.from({ length: count }, () => {
-      const depth = rnd();                       // 0 far … 1 near
-      return { x: rnd() * w, y: rnd() * h * 3, depth, r: .4 + depth * 1.3, a: .18 + depth * .5, tw: rnd() * 6.28, sp: .4 + rnd() * 1.4, vx: (rnd() - .5) * .006 * (1 + depth) };
-    });
-  }
-
-  function spawnMeteor(t) {
-    const fromLeft = Math.random() < .5;
-    meteors.push({ t0: t, x: fromLeft ? Math.random() * w * .5 : w * (.5 + Math.random() * .5), y: Math.random() * h * .5, dx: fromLeft ? 1 : -1, len: 90 + Math.random() * 120, dur: 900 + Math.random() * 600 });
-  }
-
-  // A faint ember figure joins 3–5 near stars, holds, then dissolves: the
-  // sky keeps forming asterisms as you read.
-  function spawnFigure(t, sy) {
-    const visible = stars.filter((s) => s.depth > .45).map((s) => ({ s, y: ((s.y - sy * s.depth * .25) % (h * 3) + h * 3) % (h * 3) })).filter((p) => p.y < h);
-    if (visible.length < 6) return;
-    const seedStar = visible[Math.floor(Math.random() * visible.length)];
-    const near = visible.map((p) => ({ p, d: Math.hypot(p.s.x - seedStar.s.x, p.y - seedStar.y) })).filter((q) => q.d < 260).sort((a, b) => a.d - b.d).slice(0, 3 + Math.floor(Math.random() * 3));
-    if (near.length < 3) return;
-    figures.push({ t0: t, stars: near.map((q) => q.p.s), dur: 5200 });
-  }
-
-  function frame(t) {
-    requestAnimationFrame(frame);
-    if (!on || document.hidden || t - last < 33) return;
-    last = t;
-    const sy = scrollY;
-    ctx.clearRect(0, 0, w, h);
-    const pos = (s) => [((s.x + t * s.vx) % w + w) % w, ((s.y - sy * s.depth * .25) % (h * 3) + h * 3) % (h * 3)];
-    for (const s of stars) {
-      const [x, y] = pos(s);
-      if (y > h) continue;
-      ctx.globalAlpha = s.a * (reduced ? 1 : .7 + .3 * Math.sin(t * .001 * s.sp + s.tw));
-      ctx.fillStyle = '#eef1f8';
-      ctx.beginPath(); ctx.arc(x, y, s.r, 0, 6.283); ctx.fill();
-    }
-    if (!reduced) {
-      if (t > nextFigure) { spawnFigure(t, sy); nextFigure = t + 4000 + Math.random() * 4000; }
-      for (let i = figures.length - 1; i >= 0; i--) {
-        const f = figures[i];
-        const k = (t - f.t0) / f.dur;
-        if (k >= 1) { figures.splice(i, 1); continue; }
-        const draw = clamp(k / .35), fade = k < .7 ? 1 : 1 - (k - .7) / .3;
-        const pts = f.stars.map(pos);
-        ctx.globalAlpha = .45 * fade; ctx.strokeStyle = '#f4b860'; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
-        const segs = pts.length - 1, upto = draw * segs;
-        for (let j = 1; j <= segs; j++) {
-          const q = clamp(upto - (j - 1));
-          if (q <= 0) break;
-          ctx.lineTo(pts[j - 1][0] + (pts[j][0] - pts[j - 1][0]) * q, pts[j - 1][1] + (pts[j][1] - pts[j - 1][1]) * q);
-        }
-        ctx.stroke();
-        ctx.globalAlpha = .8 * fade; ctx.fillStyle = '#ffe6bf';
-        pts.forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x, y, 1.6, 0, 6.283); ctx.fill(); });
-      }
-      if (t > nextMeteor) { spawnMeteor(t); nextMeteor = t + 5000 + Math.random() * 7000; }
-      for (let i = meteors.length - 1; i >= 0; i--) {
-        const m = meteors[i];
-        const k = (t - m.t0) / m.dur;
-        if (k >= 1) { meteors.splice(i, 1); continue; }
-        const hx = m.x + m.dx * k * 420, hy = m.y + k * 240;
-        const tx = hx - m.dx * m.len * .87, ty = hy - m.len * .5;
-        const grad = ctx.createLinearGradient(hx, hy, tx, ty);
-        grad.addColorStop(0, 'rgba(255,240,220,.9)'); grad.addColorStop(1, 'rgba(255,240,220,0)');
-        ctx.globalAlpha = Math.sin(k * Math.PI);
-        ctx.strokeStyle = grad; ctx.lineWidth = 1.2;
-        ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(tx, ty); ctx.stroke();
-      }
-    }
-    ctx.globalAlpha = 1;
-  }
-
-  // The hero has its own sky; the field takes over once it scrolls away.
-  const update = () => {
-    const next = scrollY > hero.offsetHeight * .55;
-    if (next === on) return;
-    on = next;
-    canvas.classList.toggle('on', on);
-  };
-  addEventListener('scroll', update, { passive: true });
-  update();
-  addEventListener('resize', resize);
-  resize();
-  requestAnimationFrame(frame);
-})();
-
-// ---------- polish: loader, smooth scroll, active nav, spotlight ----------
-(() => {
-  // Short branded loader; added by JS so the page never depends on it.
-  if (!reduced && !sessionStorageSafe('seen')) {
-    const loader = document.createElement('div');
-    loader.className = 'loader';
-    loader.innerHTML = '<div class="loader-in"><svg viewBox="0 0 24 24"><path d="M12 1.5c.5 5.6 4.9 10 10.5 10.5-5.6.5-10 4.9-10.5 10.5C11.5 16.9 7.1 12.5 1.5 12 7.1 11.5 11.5 7.1 12 1.5Z"/></svg><b>000</b></div>';
-    document.body.append(loader);
-    const counter = $('b', loader);
-    const t0 = performance.now();
-    const done = () => { loader.classList.add('out'); setTimeout(() => loader.remove(), 900); };
-    const step = (t) => {
-      const k = clamp((t - t0) / 1000);
-      counter.textContent = String(Math.round(ease(k) * 100)).padStart(3, '0');
-      if (k < 1) requestAnimationFrame(step); else done();
-    };
-    requestAnimationFrame(step);
-    setTimeout(done, 1600); // hard stop
-  }
-
-  if (!reduced && window.Lenis) {
-    const lenis = new window.Lenis({ lerp: .1, smoothWheel: true });
-    window.__lenis = lenis;
-    const raf = (t) => { lenis.raf(t); requestAnimationFrame(raf); };
-    requestAnimationFrame(raf);
-    document.addEventListener('click', (e) => {
-      const a = e.target.closest('a[href^="#"]');
-      if (!a) return;
-      const target = $(a.getAttribute('href'));
-      if (!target) return;
-      e.preventDefault();
-      lenis.scrollTo(target, { offset: -70 });
-    });
-  }
-
   const links = $$('.nav a');
   const io = new IntersectionObserver((entries) => entries.forEach((e) => {
-    if (!e.isIntersecting) return;
-    links.forEach((a) => a.classList.toggle('active', a.getAttribute('href') === '#' + e.target.id));
-  }), { rootMargin: '-45% 0px -50% 0px' });
-  ['method', 'pulse', 'signals', 'wallets'].forEach((id) => io.observe(document.getElementById(id)));
-  io.observe($('#sky'));
-
-  document.addEventListener('pointermove', (e) => {
-    const el = e.target.closest?.('.glow');
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    el.style.setProperty('--mx', e.clientX - r.left + 'px');
-    el.style.setProperty('--my', e.clientY - r.top + 'px');
-  }, { passive: true });
+    if (e.isIntersecting) links.forEach((a) => a.classList.toggle('active', a.getAttribute('href') === '#' + e.target.id));
+  }), { rootMargin: '-40% 0px -55% 0px' });
+  ['how', 'live', 'wallets', 'faq'].forEach((id) => io.observe(document.getElementById(id)));
 })();
-
-function sessionStorageSafe(key) {
-  try {
-    const had = sessionStorage.getItem('asterism:' + key);
-    sessionStorage.setItem('asterism:' + key, '1');
-    return had;
-  } catch { return null; }
-}
 
 load().catch((e) => console.error(e));
 setInterval(() => load().catch(() => {}), 60_000);

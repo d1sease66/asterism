@@ -150,15 +150,24 @@ export function signals(db: DB, now = Math.floor(Date.now() / 1000)) {
   return { delay_min: PUBLIC_DELAY_MIN, signals: rows };
 }
 
-/** Leaderboard: scored wallets, best first; excluded ones with their reason. */
+/**
+ * Directory: up to 300 wallets per tier (A, B, C, removed, unranked) plus the
+ * top discovery and KOL wallets, so every tab on the page has rows.
+ */
 export function wallets(db: DB) {
   const rows = db.prepare(`
-    SELECT w.address, w.tier, w.score, w.is_kol, w.twitter_username, w.excluded_reason, w.last_seen, w.tags_json, w.source, w.discovered_at,
-      (SELECT COUNT(*) FROM discovery_hits h WHERE h.wallet = w.address) AS early_hits,
+    WITH ranked AS (
+      SELECT w.*, ROW_NUMBER() OVER (PARTITION BY COALESCE(w.tier, '-') ORDER BY w.score DESC, w.last_seen DESC) AS rn,
+        ROW_NUMBER() OVER (PARTITION BY (w.discovered_at IS NOT NULL) ORDER BY w.score DESC) AS drn,
+        ROW_NUMBER() OVER (PARTITION BY w.is_kol ORDER BY w.score DESC) AS krn
+      FROM wallets w)
+    SELECT r.address, r.tier, r.score, r.is_kol, r.twitter_username, r.excluded_reason, r.last_seen, r.tags_json, r.source, r.discovered_at,
+      (SELECT COUNT(*) FROM discovery_hits h WHERE h.wallet = r.address) AS early_hits,
       m.n_buys, m.hit_rate_2x_24h, m.pnl_30d, m.winrate_30d, m.trades_per_day, m.median_hold_sec, m.kol_dump_rate
-    FROM wallets w LEFT JOIN wallet_metrics m ON m.wallet = w.address
-      AND m.computed_at = (SELECT MAX(computed_at) FROM wallet_metrics WHERE wallet = w.address)
-    ORDER BY (w.tier IS NULL), w.tier, w.score DESC, early_hits DESC, w.last_seen DESC LIMIT 1500`).all() as Array<Record<string, unknown> & { tags_json: string; excluded_reason: string | null }>;
+    FROM ranked r LEFT JOIN wallet_metrics m ON m.wallet = r.address
+      AND m.computed_at = (SELECT MAX(computed_at) FROM wallet_metrics WHERE wallet = r.address)
+    WHERE r.rn <= 300 OR (r.discovered_at IS NOT NULL AND r.drn <= 300) OR (r.is_kol = 1 AND r.krn <= 300)
+    ORDER BY (r.tier IS NULL), r.tier, r.score DESC`).all() as Array<Record<string, unknown> & { tags_json: string; excluded_reason: string | null }>;
   return {
     wallets: rows.map(({ tags_json, ...row }) => ({
       ...row,

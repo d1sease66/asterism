@@ -4,158 +4,131 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Asterism — smart money, when it agrees</title>
-  <meta name="description" content="A live sky of Solana smart-money wallets. Bots dimmed. A signal only when strong wallets buy the same token.">
-  <meta name="theme-color" content="#060912">
+  <meta name="description" content="Solana smart-money alerts that fire only when strong wallets agree. Bots removed, wallets ranked, every trade on-chain.">
+  <meta name="theme-color" content="#0b0d10">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=23">
-  <script>document.documentElement.classList.add('js')</script>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css?v=30">
 </head>
 <body>
-  <div class="nebula" aria-hidden="true"><i></i><i></i><i></i></div>
-  <canvas class="field" aria-hidden="true"></canvas>
-
-  <header class="top" id="top">
-    <a class="brand" href="#sky" aria-label="Asterism">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5c.5 5.6 4.9 10 10.5 10.5-5.6.5-10 4.9-10.5 10.5C11.5 16.9 7.1 12.5 1.5 12 7.1 11.5 11.5 7.1 12 1.5Z"/></svg>
-      <span>Asterism</span>
-    </a>
-    <nav class="nav" aria-label="Sections">
-      <a href="#method"><i>01</i>Method</a>
-      <a href="#pulse"><i>02</i>Pulse</a>
-      <a href="#signals"><i>03</i>Asterisms</a>
-      <a href="#wallets"><i>04</i>Wallets</a>
-    </nav>
-    <a class="gh" href="https://github.com/d1sease66/asterism" target="_blank" rel="noopener" aria-label="Source on GitHub" title="Source on GitHub">
-      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
-      <span>GitHub</span>
-    </a>
-    <a class="btn btn-sm" data-bot href="#final">Bot<span class="arrow">→</span></a>
+  <header class="top">
+    <div class="top-in">
+      <a class="brand" href="#top" aria-label="Asterism">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5c.5 5.6 4.9 10 10.5 10.5-5.6.5-10 4.9-10.5 10.5C11.5 16.9 7.1 12.5 1.5 12 7.1 11.5 11.5 7.1 12 1.5Z"/></svg>
+        <span>Asterism</span>
+      </a>
+      <nav class="nav" aria-label="Sections">
+        <a href="#how">How it works</a>
+        <a href="#live">Live</a>
+        <a href="#wallets">Wallets</a>
+        <a href="#faq">FAQ</a>
+      </nav>
+      <div class="top-actions">
+        <a class="link-icon" href="https://github.com/d1sease66/asterism" target="_blank" rel="noopener" aria-label="Source on GitHub" title="Source on GitHub">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+          <span>GitHub</span>
+        </a>
+        <a class="btn btn-sm" data-bot href="#faq">Open bot</a>
+      </div>
+    </div>
   </header>
 
-  <main>
-    <!-- 1. Live sky -->
-    <section class="sky" id="sky" aria-label="Live sky of wallets">
-      <canvas class="sky-canvas" aria-hidden="true"></canvas>
-      <div class="sky-tip" role="tooltip" hidden></div>
-      <div class="sky-copy">
-        <p class="kicker"><span class="pulse"></span><span>Solana · smart money · <b data-delay>15</b>&nbsp;min delay</span></p>
-        <h1 class="h1"><span class="line"><span>Smart money,</span></span><span class="line"><span><em>when it agrees.</em></span></span></h1>
-        <p class="lede" data-reveal>Every star is a real wallet. Bots are dimmed. A line lights up when strong wallets buy the same token.</p>
-        <div class="cta-row" data-reveal>
-          <a class="btn" data-bot href="#final">Telegram bot<span class="arrow">→</span></a>
-          <a class="btn btn-ghost" href="#method">How it works<span class="arrow down">↓</span></a>
+  <main id="top">
+    <!-- Hero -->
+    <section class="hero wrap">
+      <div class="hero-copy">
+        <p class="chip"><i class="live-dot"></i><span data-eyebrow>Live on Solana · <b data-delay>15</b> min public delay</span></p>
+        <h1>Smart money,<br><span class="accent">when it agrees.</span></h1>
+        <p class="lede">We read every trade GMGN calls smart money, drop the bots, rank the rest — and alert you when three strong wallets buy the same token.</p>
+        <div class="actions">
+          <a class="btn" data-bot href="#faq">Open the bot</a>
+          <a class="btn btn-ghost" href="https://github.com/d1sease66/asterism" target="_blank" rel="noopener">View source</a>
         </div>
+        <p class="meta">Telegram <button class="copy" type="button" data-copy="@solasterismbot" data-bot-handle>@solasterismbot</button> · read-only · not investment advice</p>
       </div>
-      <div class="side" data-reveal>
-        <div class="tape glow" aria-label="Live trade tape">
-          <div class="tape-head">
-            <span class="live"><i></i>Live tape</span>
-            <span class="tape-delay"><b data-delay>15</b> min delay</span>
-            <button class="tape-toggle" type="button" aria-pressed="false" data-tape-filter>Hide noise</button>
+      <figure class="sky-card">
+        <canvas class="sky-canvas" aria-label="Live sky: every star is a wallet from the base"></canvas>
+        <div class="sky-tip" role="tooltip" hidden></div>
+        <figcaption class="sky-cap"><span><i class="live-dot"></i>Live sky</span><span class="mono" data-k="stars-cap">—</span></figcaption>
+        <div class="legend" aria-hidden="true">
+          <span><i class="dot a"></i>A</span><span><i class="dot b"></i>B</span><span><i class="dot c"></i>C</span><span><i class="dot x"></i>bot</span><span><i class="line"></i>asterism</span>
+        </div>
+      </figure>
+    </section>
+
+    <section class="wrap stats" aria-label="Key numbers">
+      <div class="stat"><span>Wallets in base</span><b data-k="wallets">—</b></div>
+      <div class="stat"><span>A/B wallets</span><b data-k="ab">—</b></div>
+      <div class="stat"><span>Trades · 24h</span><b data-k="trades24h">—</b></div>
+      <div class="stat"><span>Signals · 7d</span><b data-k="signals7d">—</b></div>
+    </section>
+
+    <!-- How it works -->
+    <section class="wrap block" id="how">
+      <div class="block-head">
+        <h2>How it works</h2>
+        <p>Four steps, all on public data. The method is in the <a href="https://github.com/d1sease66/asterism#how-it-works" target="_blank" rel="noopener">README</a>.</p>
+      </div>
+      <div class="cards">
+        <article class="card">
+          <span class="n">01</span>
+          <h3>Watch the feeds</h3>
+          <p>GMGN smart-money and KOL trades, polled every 12–30 seconds. Gaps between polls are detected and logged.</p>
+          <p class="card-k"><b data-k="trades24h-2">—</b> trades in 24h</p>
+        </article>
+        <article class="card">
+          <span class="n">02</span>
+          <h3>Drop the bots</h3>
+          <p>Arbitrage and wash trading, 300+ trades a day, positions held under a minute. The “smart” tag alone is not trusted.</p>
+          <p class="card-k"><b data-k="excluded">—</b> wallets removed</p>
+        </article>
+        <article class="card">
+          <span class="n">03</span>
+          <h3>Rank the rest</h3>
+          <p>A, B or C from 30-day PnL, early entries into tokens that later hit $1M+, and how often buys reached 2× in a day.</p>
+          <p class="card-k"><b data-k="tiers">—</b></p>
+        </article>
+        <article class="card">
+          <span class="n">04</span>
+          <h3>Alert on agreement</h3>
+          <p>Three or more A/B wallets buy one token within 30 minutes, after liquidity, age and authority checks.</p>
+          <p class="card-k"><b data-k="signals7d-2">—</b> signals in 7 days</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- Live -->
+    <section class="wrap block" id="live">
+      <div class="block-head">
+        <h2>Live</h2>
+        <p>Every row is an on-chain trade. Click a wallet for its history, an amount for the transaction on Solscan.</p>
+      </div>
+      <div class="live-grid">
+        <div class="panel tape">
+          <div class="panel-head">
+            <span class="ph-title"><i class="live-dot"></i><span data-tape-title>Trade tape</span></span>
+            <span class="mono muted" data-tape-meta><b data-delay>15</b> min delay</span>
+            <button class="toggle" type="button" aria-pressed="false" data-tape-filter>Hide bots</button>
           </div>
           <ol class="tape-rows" aria-live="off"></ol>
         </div>
-        <dl class="hud glow">
-          <div><dt>Wallets · 24h</dt><dd data-k="stars">—</dd></div>
-          <div><dt>Noise</dt><dd data-k="noise">—</dd></div>
-          <div><dt>Trades / min</dt><dd data-k="tpm">—</dd></div>
-        </dl>
-        <div class="legend" aria-hidden="true">
-          <span><i class="dot a"></i>A</span><span><i class="dot b"></i>B</span><span><i class="dot c"></i>C · unranked</span><span><i class="dot x"></i>noise</span><span><i class="ring"></i>KOL</span>
-        </div>
-      </div>
-    </section>
-
-    <!-- 2. Story: noise → asterism -->
-    <section class="story" id="method" aria-label="Method">
-      <div class="steps">
-        <p class="kicker story-kicker"><i>01</i>Method</p>
-        <article class="step" data-step="0">
-          <p class="num">01</p>
-          <h2>100 trades in&nbsp;25&nbsp;seconds.</h2>
-          <p>That's how fast GMGN's smart-money feed moves. We read it nonstop and check that nothing slips between polls.</p>
-        </article>
-        <article class="step" data-step="1">
-          <p class="num">02</p>
-          <h2>Most of it is machines.</h2>
-          <p>Arbitrage, wash trading, thousands of buys a day. A “smart” tag doesn't save them: they go dark.</p>
-        </article>
-        <article class="step" data-step="2">
-          <p class="num">03</p>
-          <h2>The rest earn a rank.</h2>
-          <p>A, B or C — by how often their buys hit 2× within a day, plus 30-day PnL and win rate.</p>
-        </article>
-        <article class="step" data-step="3">
-          <p class="num">04</p>
-          <h2>Three agree — <em>an asterism.</em></h2>
-          <p>Three A/B wallets in one token within 30 minutes, liquidity and risk checks, then a Telegram alert.</p>
-        </article>
-      </div>
-      <div class="stage">
-        <div class="stage-inner">
-          <canvas class="story-canvas" aria-hidden="true"></canvas>
-          <div class="stage-labels" aria-hidden="true">
-            <span class="sl sl-0">smartmoney · 100 records</span>
-            <span class="sl sl-1">arbitrager · wash_trader · 35k buys / 30d</span>
-            <span class="sl sl-2">A · B · C</span>
+        <div class="panel">
+          <div class="panel-head">
+            <span class="ph-title">Asterisms</span>
+            <span class="mono muted" data-signals-meta>signals and results</span>
           </div>
-          <figure class="alert" aria-label="Example alert">
-            <div class="alert-head"><span class="alert-ava"></span><b>Asterism</b><span class="alert-bot">bot</span><time>14:32</time></div>
-            <p>🔥 Cluster: <b>$SYMBOL</b> · 4 smart wallets in 18 min</p>
-            <p class="m">MC $420k · liq $86k · age 3h · bundlers 12% · rug 0.08</p>
-            <p class="m">• A · hit 61% · $2.1k · 7xKq…3fP2<br>• A · hit 54% · $900 · 9aBc…Lm1Q<br>• B · KOL @handle · $1.5k</p>
-            <p class="m dim">GMGN · Dexscreener · Solscan</p>
-            <figcaption>example format</figcaption>
-          </figure>
+          <ul class="sig-list" data-list="signals"></ul>
         </div>
       </div>
     </section>
 
-    <!-- 3. Pulse -->
-    <section class="block" id="pulse">
+    <!-- Wallets -->
+    <section class="wrap block" id="wallets">
       <div class="block-head">
-        <p class="kicker"><i>02</i>Pulse</p>
-        <h2 class="h2">The feed, <em>measured.</em></h2>
-        <p class="sub">Every trade GMGN labels smart money, in 15-minute buckets. White is what we keep. Red is what we dim.</p>
-      </div>
-      <div class="kpis">
-        <div class="kpi glow" data-reveal><span>Trades · 24h</span><b data-p="trades">—</b></div>
-        <div class="kpi glow" data-reveal><span>Wallets</span><b data-p="wallets">—</b></div>
-        <div class="kpi glow" data-reveal><span>Tokens</span><b data-p="tokens">—</b></div>
-        <div class="kpi glow" data-reveal><span>Kept volume</span><b data-p="usd">—</b></div>
-      </div>
-      <div class="panel chart glow" data-reveal>
-        <div class="chart-head"><span class="key"><i class="k-real"></i>kept</span><span class="key"><i class="k-noise"></i>dimmed</span><span class="chart-note" data-chart-note></span></div>
-        <canvas class="chart-canvas" aria-label="Trades per 15 minutes, last 24 hours"></canvas>
-        <div class="chart-tip" hidden></div>
-      </div>
-    </section>
-
-    <!-- 4. Signals -->
-    <section class="block" id="signals">
-      <div class="block-head">
-        <p class="kicker"><i>03</i>Log</p>
-        <h2 class="h2">Asterisms</h2>
-        <p class="sub">Every signal and what happened next. Published <b data-delay>15</b> minutes after the alert.</p>
-      </div>
-      <div class="panel glow">
-        <p class="empty" data-empty="signals" hidden></p>
-        <table class="table" data-table="signals">
-          <thead><tr><th>Time</th><th>Token</th><th>Wallets</th><th class="r">Size</th><th class="r">MC</th><th class="r">Max 24h</th><th class="r">Now</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- 5. Wallets -->
-    <section class="block" id="wallets">
-      <div class="block-head">
-        <p class="kicker"><i>04</i>Directory</p>
-        <h2 class="h2">Wallets</h2>
-        <p class="sub">Full addresses, rank, and why a wallet went dark. Re-scored daily.</p>
+        <h2>Wallets</h2>
+        <p>Full addresses, rank and why a wallet was removed. Re-scored every six hours.</p>
       </div>
       <div class="tabs" role="tablist">
         <button role="tab" data-tab="A" aria-selected="true">A</button>
@@ -163,9 +136,9 @@
         <button role="tab" data-tab="C">C</button>
         <button role="tab" data-tab="kol">KOL</button>
         <button role="tab" data-tab="d">Discovered</button>
-        <button role="tab" data-tab="x">Dimmed</button>
+        <button role="tab" data-tab="x">Removed</button>
       </div>
-      <div class="panel glow">
+      <div class="panel table-wrap">
         <table class="table" data-table="wallets">
           <thead><tr><th>#</th><th>Wallet</th><th>X</th><th class="r" data-col="metric">Hit 2× / 24h</th><th class="r">PnL 30d</th><th class="r">Win rate</th><th class="r">Active</th></tr></thead>
           <tbody></tbody>
@@ -174,24 +147,48 @@
       </div>
     </section>
 
-    <!-- 6. Final -->
-    <section class="final" id="final">
-      <div class="final-card" data-pop>
-        <svg class="final-star" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5c.5 5.6 4.9 10 10.5 10.5-5.6.5-10 4.9-10.5 10.5C11.5 16.9 7.1 12.5 1.5 12 7.1 11.5 11.5 7.1 12 1.5Z"/></svg>
-        <h2>See the asterism <em>first.</em></h2>
-        <p>Telegram gets the alert instantly. The site shows it <b data-delay>15</b> minutes later.</p>
-        <a class="btn btn-dark" data-bot href="#final">Telegram bot<span class="arrow">→</span></a>
-        <p class="final-note" data-bot-note>The bot is launching. The link will appear here.</p>
+    <!-- FAQ -->
+    <section class="wrap block faq" id="faq">
+      <div class="block-head">
+        <h2>FAQ</h2>
       </div>
-      <p class="strip">Read-only · no keys, no swaps · data from GMGN</p>
+      <div class="faq-list">
+        <details>
+          <summary>Where does the data come from?</summary>
+          <p>GMGN's public smart-money and KOL feeds, token info and top-trader lists, read through its OpenAPI. Every trade carries its Solana transaction hash and links to Solscan.</p>
+        </details>
+        <details>
+          <summary>Why is the site 15 minutes behind?</summary>
+          <p>The Telegram bot gets every alert the moment it fires. The site shows the same data with a delay, so it never front-runs the people who use the bot.</p>
+        </details>
+        <details>
+          <summary>What exactly triggers an alert?</summary>
+          <p>Three or more distinct A/B wallets buying at least $300 of one token within 30 minutes. A KOL in the same window marks it as a stronger signal. An A wallet's first buy of $1,000+ and three A/B wallets fully exiting a signalled token also alert.</p>
+        </details>
+        <details>
+          <summary>Which tokens are filtered out?</summary>
+          <p>Market cap outside $30k–$20M, liquidity under $15k, younger than 10 minutes, mint or freeze authority still active, or more than 30% of volume from bundlers. The same alert for a token is sent at most once an hour; if the cluster grows, the original message is edited.</p>
+        </details>
+        <details>
+          <summary>How are wallets ranked?</summary>
+          <p>score = 0.45·hit rate + 0.25·rank of 30-day PnL + 0.20·win rate + 0.10·freshness. Top 15% are A, the next 25% B, the rest C. Until a wallet has ten buys with a known 24-hour outcome, early entries into winning tokens stand in for the hit rate.</p>
+        </details>
+        <details>
+          <summary>Can it trade for me?</summary>
+          <p>No. Asterism only reads public data. It holds no keys, signs nothing and never swaps. Nothing here is investment advice.</p>
+        </details>
+      </div>
     </section>
   </main>
 
-  <footer class="foot">
-    <div class="foot-row">
-      <span>Not investment advice. · <a href="https://github.com/d1sease66/asterism" target="_blank" rel="noopener">Source on GitHub</a></span>
-      <span data-since></span>
-    </div>
+  <footer class="foot wrap">
+    <a class="brand" href="#top"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5c.5 5.6 4.9 10 10.5 10.5-5.6.5-10 4.9-10.5 10.5C11.5 16.9 7.1 12.5 1.5 12 7.1 11.5 11.5 7.1 12 1.5Z"/></svg><span>Asterism</span></a>
+    <nav class="foot-links">
+      <a data-bot href="#faq">Telegram bot</a>
+      <a href="https://github.com/d1sease66/asterism" target="_blank" rel="noopener">GitHub</a>
+      <a href="/api/public/summary" target="_blank" rel="noopener">API</a>
+    </nav>
+    <p class="foot-note"><span data-since>Data from GMGN.</span> Not investment advice.</p>
   </footer>
 
   <aside class="drawer" hidden>
@@ -202,7 +199,6 @@
     </div>
   </aside>
 
-  <script src="https://cdn.jsdelivr.net/npm/lenis@1.1.20/dist/lenis.min.js" defer></script>
-  <script src="/app.js?v=23" defer></script>
+  <script src="/app.js?v=30" defer></script>
 </body>
 </html>
