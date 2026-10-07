@@ -7,7 +7,7 @@ how their buys actually performed, and sends a Telegram alert when several high-
 same token within 30 minutes. A public dashboard shows the same data with a 15-minute delay.
 
 - **Dashboard:** https://solasterism.xyz (mirror: https://solquorum.vercel.app)
-- **Telegram bot:** [@solasterismbot](https://t.me/solasterismbot)
+- **Telegram bot:** [@solQuorumbot](https://t.me/solQuorumbot)
 - **X:** [@useAsterism](https://x.com/useAsterism)
 - **Public API:** https://solasterism.xyz/api/public/summary
 
